@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.StatusBarAlignment.Right, 
         100
     );
-    statusBarItem.text = "$(mic) Voice Doc";
+  statusBarItem.text = "$(record) Voice Doc";
     statusBarItem.tooltip = "Klicken für Sprachaufnahme (Ctrl+Alt+R)";
     statusBarItem.command = 'voiceDoc.startRecording';
     statusBarItem.show();
@@ -34,9 +34,10 @@ export function activate(context: vscode.ExtensionContext) {
             try {
 
                 await audioRecorder.startRecording();
+                console.log("TEST: Würde jetzt aufnehmen!");
                 
                 isRecording = true;
-                statusBarItem.text = "$(stop-circle) Recording...";
+                statusBarItem.text = "$(record) Voice Doc"; 
                 statusBarItem.command = 'voiceDoc.stopRecording';
                 statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
                 
@@ -62,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const audioFilePath = await audioRecorder.stopRecording();
                 
                 isRecording = false;
-                statusBarItem.text = "$(mic) Voice Doc";
+                statusBarItem.text = "$(record) Voice Doc";
                 statusBarItem.command = 'voiceDoc.startRecording';
                 statusBarItem.backgroundColor = undefined;
                 
