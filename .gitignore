@@ -1,0 +1,17 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+.env
+*.log
+.DS_Store
+
+# API Keys und Secrets
+config.json
+secrets.json
+
+# Audio Temporary Files
+*.wav
+*.mp3
+temp/
