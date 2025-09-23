@@ -11,7 +11,10 @@
   "engines": {
     "vscode": "^1.70.0"
   },
-  "categories": ["Programming Languages", "Other"],
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
   "activationEvents": [
     "onCommand:voiceDoc.startRecording",
     "onCommand:voiceDoc.stopRecording",
@@ -42,13 +45,20 @@
         "voiceDoc.speechService": {
           "type": "string",
           "default": "azure",
-          "enum": ["azure", "google", "whisper"],
+          "enum": [
+            "azure",
+            "google",
+            "whisper"
+          ],
           "description": "Speech-to-Text Service Provider"
         },
         "voiceDoc.language": {
           "type": "string",
           "default": "de-DE",
-          "enum": ["de-DE", "en-US"],
+          "enum": [
+            "de-DE",
+            "en-US"
+          ],
           "description": "Language for speech recognition"
         },
         "voiceDoc.apiKey": {
@@ -68,14 +78,14 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ --noEmitOnError false",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/node": "16.x",
+    "@types/node": "^16.18.0",
     "@types/vscode": "^1.70.0",
     "@typescript-eslint/eslint-plugin": "^5.31.0",
     "@typescript-eslint/parser": "^5.31.0",
@@ -84,7 +94,7 @@
     "typescript": "^4.7.4"
   },
   "dependencies": {
-    "node-record-lpcm16": "^1.0.1",
-    "axios": "^1.4.0"
+    "axios": "^1.4.0",
+    "node-record-lpcm16": "^1.0.1"
   }
 }
