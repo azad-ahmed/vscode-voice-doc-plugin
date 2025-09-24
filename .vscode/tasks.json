@@ -2,15 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm", 
+      "type": "npm",
       "script": "compile",
-      "group": "build",
-      "presentation": {
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": false
+      "problemMatcher": "$tsc",
+      "group": {
+        "kind": "build",
+        "isDefault": true
       },
-      "problemMatcher": ["$tsc"]
+      "label": "npm: compile"
     }
   ]
 }

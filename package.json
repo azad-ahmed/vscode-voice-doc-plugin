@@ -1,42 +1,23 @@
 {
   "name": "vscode-voice-doc-plugin",
-  "displayName": "Voice Documentation with AI",
-  "description": "KI-gestützte Code-Dokumentation per Spracheingabe - verwandelt gesprochene Erklärungen automatisch in professionelle Code-Kommentare",
+  "displayName": "Voice Documentation Plugin",
+  "description": "KI-gestützte Code-Dokumentation per Spracheingabe",
   "version": "1.0.0",
   "publisher": "azad-ahmed",
-  "author": {
-    "name": "Azad Ahmed",
-    "email": "your-email@example.com"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/azad-ahmed/vscode-voice-doc-plugin.git"
-  },
-  "license": "MIT",
-  "icon": "icon.png",
-  "galleryBanner": {
-    "color": "#667eea",
-    "theme": "dark"
-  },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.70.0"
   },
   "categories": [
     "Programming Languages",
-    "Other",
-    "Machine Learning",
-    "Snippets"
+    "Other"
   ],
   "keywords": [
     "voice",
-    "speech",
     "documentation",
     "comments",
-    "AI",
-    "ChatGPT",
-    "Claude",
-    "German",
-    "JSDoc"
+    "speech",
+    "ai",
+    "openai"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -45,260 +26,99 @@
   "contributes": {
     "commands": [
       {
-        "command": "voiceDocs.toggleRecording",
-        "title": "Voice Docs: Sprachdokumentation starten",
-        "category": "Voice Documentation",
+        "command": "voiceDocPlugin.toggleRecording",
+        "title": "Voice Doc: Aufnahme starten/stoppen",
         "icon": "$(mic)"
       },
       {
-        "command": "voiceDocs.quickInput",
-        "title": "Voice Docs: Text direkt eingeben",
-        "category": "Voice Documentation",
-        "icon": "$(keyboard)"
+        "command": "voiceDocPlugin.startRecording",
+        "title": "Voice Doc: Aufnahme starten",
+        "icon": "$(record)"
       },
       {
-        "command": "voiceDocs.multiStep",
-        "title": "Voice Docs: Strukturierte Eingabe",
-        "category": "Voice Documentation",
-        "icon": "$(checklist)"
+        "command": "voiceDocPlugin.stopRecording",
+        "title": "Voice Doc: Aufnahme stoppen",
+        "icon": "$(stop)"
       },
       {
-        "command": "voiceDocs.clipboard",
-        "title": "Voice Docs: Clipboard-Methode",
-        "category": "Voice Documentation",
+        "command": "voiceDocPlugin.convertToComment",
+        "title": "Voice Doc: Text zu Kommentar konvertieren",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "voiceDocPlugin.insertFromClipboard",
+        "title": "Voice Doc: Kommentar aus Zwischenablage",
         "icon": "$(clippy)"
       },
       {
-        "command": "voiceDocs.systemVoice",
-        "title": "Voice Docs: System-Spracherkennung",
-        "category": "Voice Documentation",
-        "icon": "$(unmute)"
-      },
-      {
-        "command": "voiceDocs.enhanceText",
-        "title": "Voice Docs: Ausgewählten Text mit AI verbessern",
-        "category": "Voice Documentation",
-        "icon": "$(sparkle)"
-      },
-      {
-        "command": "voiceDocs.configureOpenAI",
-        "title": "Voice Docs: OpenAI API Key konfigurieren",
-        "category": "Voice Documentation",
+        "command": "voiceDocPlugin.configureOpenAI",
+        "title": "Voice Doc: OpenAI API Key konfigurieren",
         "icon": "$(key)"
       },
       {
-        "command": "voiceDocs.configureAnthropic",
-        "title": "Voice Docs: Anthropic/Claude API Key konfigurieren",
-        "category": "Voice Documentation",
-        "icon": "$(key)"
-      },
-      {
-        "command": "voiceDocs.testOpenAI",
-        "title": "Voice Docs: OpenAI API Key testen",
-        "category": "Voice Documentation",
-        "icon": "$(testing-passed-icon)"
-      },
-      {
-        "command": "voiceDocs.testAnthropic",
-        "title": "Voice Docs: Anthropic API Key testen",
-        "category": "Voice Documentation",
-        "icon": "$(testing-passed-icon)"
-      },
-      {
-        "command": "voiceDocs.testAllKeys",
-        "title": "Voice Docs: Alle API Keys testen",
-        "category": "Voice Documentation",
+        "command": "voiceDocPlugin.test",
+        "title": "Voice Doc: Test-Funktionen",
         "icon": "$(beaker)"
-      },
-      {
-        "command": "voiceDocs.validateComment",
-        "title": "Voice Docs: Kommentar-Qualität prüfen",
-        "category": "Voice Documentation"
-      },
-      {
-        "command": "voiceDocs.selectProvider",
-        "title": "Voice Docs: AI Provider auswählen",
-        "category": "Voice Documentation"
       }
     ],
     "keybindings": [
       {
-        "command": "voiceDocs.toggleRecording",
-        "key": "ctrl+shift+v",
-        "mac": "cmd+shift+v",
+        "command": "voiceDocPlugin.toggleRecording",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
         "when": "editorTextFocus"
       },
       {
-        "command": "voiceDocs.enhanceText",
-        "key": "ctrl+shift+e",
-        "mac": "cmd+shift+e",
+        "command": "voiceDocPlugin.convertToComment",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
         "when": "editorHasSelection"
-      },
-      {
-        "command": "voiceDocs.testAllKeys",
-        "key": "ctrl+shift+t",
-        "mac": "cmd+shift+t"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "voiceDocs.addCommentHere",
-          "group": "voiceDocs@1",
+          "command": "voiceDocPlugin.toggleRecording",
+          "group": "voiceDoc@1",
           "when": "editorTextFocus"
         },
         {
-          "command": "voiceDocs.enhanceText",
-          "group": "voiceDocs@2",
+          "command": "voiceDocPlugin.convertToComment",
+          "group": "voiceDoc@2",
           "when": "editorHasSelection"
-        }
-      ],
-      "editor/title": [
+        },
         {
-          "command": "voiceDocs.startVoice",
-          "group": "navigation",
+          "command": "voiceDocPlugin.insertFromClipboard",
+          "group": "voiceDoc@3",
           "when": "editorTextFocus"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "voiceDocs.startVoice",
-          "when": "editorIsOpen"
-        },
-        {
-          "command": "voiceDocs.stopVoice",
-          "when": "editorIsOpen"
-        },
-        {
-          "command": "voiceDocs.enhanceText",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "voiceDocs.validateComment"
-        },
-        {
-          "command": "voiceDocs.selectProvider"
-        },
-        {
-          "command": "voiceDocs.configureOpenAI"
-        },
-        {
-          "command": "voiceDocs.configureAnthropic"
         }
       ]
     },
     "configuration": {
-      "title": "Voice Documentation",
+      "title": "Voice Documentation Plugin",
       "properties": {
-        "voiceDocs.aiProvider": {
+        "voiceDocPlugin.openAIApiKey": {
           "type": "string",
-          "enum": [
-            "openai",
-            "anthropic",
-            "none"
-          ],
-          "default": "openai",
-          "description": "Welcher AI-Provider soll für die Textverbesserung verwendet werden?",
-          "enumDescriptions": [
-            "OpenAI GPT (ChatGPT)",
-            "Anthropic Claude",
-            "Keine AI-Verbesserung (nur Basis-Textverarbeitung)"
-          ]
+          "default": "",
+          "description": "OpenAI API Key für GPT",
+          "markdownDescription": "Erhalten Sie Ihren API Key unter [platform.openai.com](https://platform.openai.com/api-keys)"
         },
-        "voiceDocs.openaiModel": {
+        "voiceDocPlugin.language": {
           "type": "string",
-          "enum": [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4-turbo",
-            "gpt-3.5-turbo"
-          ],
-          "default": "gpt-4o-mini",
-          "description": "OpenAI Modell für die Textverbesserung"
-        },
-        "voiceDocs.anthropicModel": {
-          "type": "string",
-          "enum": [
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
-          ],
-          "default": "claude-3-haiku-20240307",
-          "description": "Anthropic Claude Modell für die Textverbesserung"
-        },
-        "voiceDocs.language": {
-          "type": "string",
+          "default": "de-DE",
           "enum": [
             "de-DE",
             "en-US",
-            "en-GB",
-            "fr-FR",
-            "es-ES"
+            "en-GB"
           ],
-          "default": "de-DE",
-          "description": "Sprache für die Spracherkennung",
-          "enumDescriptions": [
-            "Deutsch (Deutschland)",
-            "English (US)",
-            "English (UK)",
-            "Français",
-            "Español"
-          ]
+          "description": "Sprache für die Spracherkennung"
         },
-        "voiceDocs.autoInsert": {
-          "type": "boolean",
-          "default": true,
-          "description": "Kommentare automatisch an der richtigen Stelle im Code einfügen"
-        },
-        "voiceDocs.serverPort": {
+        "voiceDocPlugin.multilineThreshold": {
           "type": "number",
-          "default": 9000,
-          "minimum": 1024,
-          "maximum": 65535,
-          "description": "HTTP Port für den lokalen Voice Server"
-        },
-        "voiceDocs.websocketPort": {
-          "type": "number",
-          "default": 9001,
-          "minimum": 1024,
-          "maximum": 65535,
-          "description": "WebSocket Port für die Echtzeitkommunikation"
-        },
-        "voiceDocs.debounceDelay": {
-          "type": "number",
-          "default": 200,
-          "minimum": 100,
-          "maximum": 1000,
-          "description": "Verzögerung für Code-Kontext-Tracking in Millisekunden"
-        },
-        "voiceDocs.maxCommentLength": {
-          "type": "number",
-          "default": 500,
-          "minimum": 100,
-          "maximum": 2000,
-          "description": "Maximale Länge eines generierten Kommentars in Zeichen"
-        },
-        "voiceDocs.removeFillerWords": {
-          "type": "boolean",
-          "default": true,
-          "description": "Füllwörter wie 'äh', 'ähm', 'also' automatisch entfernen"
-        },
-        "voiceDocs.useJSDoc": {
-          "type": "boolean",
-          "default": true,
-          "description": "JSDoc-Format für JavaScript/TypeScript Funktionen verwenden"
-        },
-        "voiceDocs.aiTemperature": {
-          "type": "number",
-          "default": 0.3,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "AI Kreativität (0 = deterministisch, 1 = kreativ)"
-        },
-        "voiceDocs.autoOpenBrowser": {
-          "type": "boolean",
-          "default": true,
-          "description": "Browser automatisch öffnen beim Start der Sprachaufnahme"
+          "default": 80,
+          "minimum": 40,
+          "maximum": 200,
+          "description": "Zeichenanzahl ab der mehrzeilige Kommentare verwendet werden"
         }
       }
     }
@@ -307,50 +127,23 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
-    "clean": "rimraf out",
-    "package": "vsce package",
-    "publish": "vsce publish"
+    "start": "code --extensionDevelopmentPath=.",
+    "debug": "npm run compile && code --extensionDevelopmentPath=."
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
-    "@types/ws": "^8.5.10",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
-    "@vscode/test-electron": "^2.3.8",
-    "@vscode/vsce": "^2.22.0",
-    "eslint": "^8.56.0",
-    "rimraf": "^5.0.5",
-    "typescript": "^5.3.3"
+    "@types/node": "16.x",
+    "@types/vscode": "^1.70.0",
+    "@typescript-eslint/eslint-plugin": "^5.31.0",
+    "@typescript-eslint/parser": "^5.31.0",
+    "eslint": "^8.20.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^4.7.4"
   },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.24.0",
-    "openai": "^4.56.0",
-    "ws": "^8.16.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/azad-ahmed/vscode-voice-doc-plugin.git"
   },
-  "capabilities": {
-    "untrustedWorkspaces": {
-      "supported": false,
-      "description": "Diese Extension benötigt Zugriff auf lokale Server und API Keys"
-    }
-  },
-  "badges": [
-    {
-      "url": "https://img.shields.io/badge/VS%20Code-1.85%2B-blue",
-      "href": "https://code.visualstudio.com/",
-      "description": "Minimum VS Code version"
-    },
-    {
-      "url": "https://img.shields.io/badge/AI-GPT%20%26%20Claude-green",
-      "href": "https://openai.com/",
-      "description": "AI-powered documentation"
-    }
-  ],
-  "__metadata": {
-    "publisherDisplayName": "Azad Ahmed",
-    "installedTimestamp": 1700000000000
-  }
+  "license": "MIT"
 }
