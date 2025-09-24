@@ -1,17 +1,48 @@
-out
-dist
-node_modules
-.vscode-test/
+# Compiled output
+out/
+dist/
 *.vsix
-.env
+
+# Node modules
+node_modules/
+npm-debug.log*
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
 *.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# API Keys und Secrets
-config.json
-secrets.json
+# API Keys (Sicherheit!)
+.env
+.env.local
+.env.production
+*.key
 
-# Audio Temporary Files
-*.wav
-*.mp3
-temp/
+# Temporary files
+*.tmp
+*.temp
