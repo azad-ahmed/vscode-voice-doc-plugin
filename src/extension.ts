@@ -1,462 +1,455 @@
 import * as vscode from "vscode";
 import { CommentGenerator } from "./generator";
-import { AIService } from "./services/aiService";
+import { IntegratedVoiceHandler } from "./integratedVoiceHandler";
 
-let isRecording = false;
-let recordingStatusBarItem: vscode.StatusBarItem;
-let aiService: AIService;
-let commentGenerator: CommentGenerator;
+let voiceHandler: IntegratedVoiceHandler | null = null;
+let generator: CommentGenerator | null = null;
 
-export function activate(context: vscode.ExtensionContext) {
-  console.log("Voice Documentation Plugin aktiviert");
+/**
+ * Aktiviert die Extension
+ */
+export async function activate(context: vscode.ExtensionContext) {
+  console.log("Voice Documentation Extension wird aktiviert...");
 
-  // Services initialisieren
-  aiService = new AIService();
-  commentGenerator = new CommentGenerator();
+  // Initialisiere Comment Generator
+  generator = new CommentGenerator("auto", context);
+  await generator.initializeAI();
 
-  // Status Bar Item erstellen
-  recordingStatusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    100
+  // Initialisiere Voice Handler (integrierte Lösung)
+  voiceHandler = new IntegratedVoiceHandler(context, generator);
+
+  // === Kommandos registrieren ===
+
+  // 1. Hauptkommando: Voice Documentation Toggle
+  const toggleRecordingCommand = vscode.commands.registerCommand(
+    "voiceDocs.toggleRecording",
+    async () => {
+      if (voiceHandler) {
+        await voiceHandler.toggleRecording();
+      }
+    }
   );
-  recordingStatusBarItem.text = "$(record) Voice Doc";
-  recordingStatusBarItem.command = "voiceDoc.startRecording";
-  recordingStatusBarItem.tooltip = "Start Voice Documentation Recording";
-  recordingStatusBarItem.show();
-  context.subscriptions.push(recordingStatusBarItem);
 
-  // Commands registrieren
-  registerCommands(context);
+  // 2. Direkte Text-Eingabe
+  const quickInputCommand = vscode.commands.registerCommand(
+    "voiceDocs.quickInput",
+    async () => {
+      if (voiceHandler) {
+        await voiceHandler.showQuickInput();
+      }
+    }
+  );
 
-  // Konfiguration Change Listener
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("voiceDoc")) {
+  // 3. Strukturierte Eingabe
+  const multiStepCommand = vscode.commands.registerCommand(
+    "voiceDocs.multiStep",
+    async () => {
+      if (voiceHandler) {
+        await voiceHandler.showMultiStepInput();
+      }
+    }
+  );
+
+  // 4. Clipboard-Methode
+  const clipboardCommand = vscode.commands.registerCommand(
+    "voiceDocs.clipboard",
+    async () => {
+      if (voiceHandler) {
+        await voiceHandler.startClipboardMonitoring();
+      }
+    }
+  );
+
+  // 5. System Voice Typing
+  const systemVoiceCommand = vscode.commands.registerCommand(
+    "voiceDocs.systemVoice",
+    async () => {
+      if (voiceHandler) {
+        await voiceHandler.useSystemVoiceTyping();
+      }
+    }
+  );
+
+  // 6. Ausgewählten Text mit AI verbessern
+  const enhanceTextCommand = vscode.commands.registerTextEditorCommand(
+    "voiceDocs.enhanceText",
+    async (textEditor, edit) => {
+      const selection = textEditor.selection;
+      const selectedText = textEditor.document.getText(selection);
+
+      if (!selectedText) {
+        vscode.window.showWarningMessage("Bitte wählen Sie zuerst Text aus");
+        return;
+      }
+
+      if (generator) {
+        const enhanced = await generator.processVoiceInput(selectedText);
         vscode.window.showInformationMessage(
-          "Voice Doc Konfiguration aktualisiert"
+          "Text wurde verarbeitet und eingefügt"
         );
       }
-    })
-  );
-
-  // Willkommensnachricht beim ersten Start
-  const hasShownWelcome = context.globalState.get("voiceDoc.hasShownWelcome");
-  if (!hasShownWelcome) {
-    showWelcomeMessage(context);
-  }
-}
-
-function registerCommands(context: vscode.ExtensionContext) {
-  // Start Recording Command
-  let startRecordingCommand = vscode.commands.registerCommand(
-    "voiceDoc.startRecording",
-    async () => {
-      if (isRecording) {
-        vscode.window.showWarningMessage("Aufnahme läuft bereits...");
-        return;
-      }
-
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showErrorMessage("Kein aktiver Editor gefunden");
-        return;
-      }
-
-      await startVoiceRecording(editor);
     }
   );
 
-  // Stop Recording Command
-  let stopRecordingCommand = vscode.commands.registerCommand(
-    "voiceDoc.stopRecording",
+  // 7. API Keys konfigurieren
+  const configureOpenAICommand = vscode.commands.registerCommand(
+    "voiceDocs.configureOpenAI",
     async () => {
-      if (!isRecording) {
-        vscode.window.showWarningMessage("Keine aktive Aufnahme");
-        return;
-      }
-
-      await stopVoiceRecording();
-    }
-  );
-
-  // Configure API Command
-  let configureApiCommand = vscode.commands.registerCommand(
-    "voiceDoc.configureApi",
-    async () => {
-      await showApiConfiguration();
-    }
-  );
-
-  // Test Connection Command
-  let testConnectionCommand = vscode.commands.registerCommand(
-    "voiceDoc.testConnection",
-    async () => {
-      await testAIConnections();
-    }
-  );
-
-  context.subscriptions.push(
-    startRecordingCommand,
-    stopRecordingCommand,
-    configureApiCommand,
-    testConnectionCommand
-  );
-}
-
-async function startVoiceRecording(editor: vscode.TextEditor) {
-  try {
-    isRecording = true;
-    updateStatusBarItem(true);
-
-    // Simuliere Aufnahmestart (hier würde echte Audio-Aufnahme starten)
-    vscode.window
-      .showInformationMessage(
-        "🎤 Aufnahme gestartet - sprechen Sie jetzt!",
-        "Stop"
-      )
-      .then((selection) => {
-        if (selection === "Stop") {
-          vscode.commands.executeCommand("voiceDoc.stopRecording");
-        }
+      const apiKey = await vscode.window.showInputBox({
+        prompt: "OpenAI API Key eingeben",
+        password: true,
+        placeHolder: "sk-...",
       });
 
-    // Für Demo: Nach 5 Sekunden automatisch stoppen
-    setTimeout(async () => {
-      if (isRecording) {
-        await simulateTranscription(editor);
-      }
-    }, 5000);
-  } catch (error) {
-    console.error("Error starting recording:", error);
-    vscode.window.showErrorMessage(
-      `Fehler beim Starten der Aufnahme: ${error}`
-    );
-    isRecording = false;
-    updateStatusBarItem(false);
-  }
-}
+      if (apiKey) {
+        // Teste den Key sofort
+        vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Teste OpenAI API Key...",
+            cancellable: false,
+          },
+          async () => {
+            const testResult = await generator?.testOpenAIKey(apiKey);
 
-async function stopVoiceRecording() {
-  try {
-    isRecording = false;
-    updateStatusBarItem(false);
-    vscode.window.showInformationMessage("⏹️ Aufnahme gestoppt");
-  } catch (error) {
-    console.error("Error stopping recording:", error);
-    vscode.window.showErrorMessage(
-      `Fehler beim Stoppen der Aufnahme: ${error}`
-    );
-  }
-}
+            if (testResult?.valid) {
+              // Speichere nur wenn gültig
+              await context.secrets.store("openai.apiKey", apiKey);
+              vscode.window.showInformationMessage(testResult.message);
 
-async function simulateTranscription(editor: vscode.TextEditor) {
-  // Demo-Transkription für Tests
-  const demoTranscript =
-    "Diese Funktion berechnet den Steuerbetrag basierend auf dem Einkommen";
-
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: "Voice Doc",
-      cancellable: false,
-    },
-    async (progress) => {
-      progress.report({ message: "Verarbeite Spracheingabe..." });
-
-      try {
-        // Code-Kontext extrahieren
-        const position = editor.selection.active;
-        const lineText = editor.document.lineAt(position.line).text;
-        const codeContext = getCodeContext(editor, position);
-
-        // Kommentar generieren
-        const comment = await commentGenerator.formatComment(
-          demoTranscript,
-          editor.document.languageId,
-          codeContext
+              // Neu initialisieren
+              await generator?.initializeAI();
+            } else {
+              // Zeige Fehler, speichere nicht
+              vscode.window.showErrorMessage(
+                testResult?.message || "API Key ungültig"
+              );
+            }
+          }
         );
-
-        // Kommentar einfügen
-        await insertComment(editor, position, comment);
-
-        progress.report({ message: "Kommentar eingefügt!" });
-      } catch (error) {
-        console.error("Error processing transcription:", error);
-        vscode.window.showErrorMessage(`Fehler bei der Verarbeitung: ${error}`);
-      } finally {
-        isRecording = false;
-        updateStatusBarItem(false);
       }
     }
   );
-}
 
-function getCodeContext(
-  editor: vscode.TextEditor,
-  position: vscode.Position
-): string {
-  // Extrahiere Code-Kontext um die aktuelle Position
-  const startLine = Math.max(0, position.line - 5);
-  const endLine = Math.min(editor.document.lineCount - 1, position.line + 5);
+  const configureAnthropicCommand = vscode.commands.registerCommand(
+    "voiceDocs.configureAnthropic",
+    async () => {
+      const apiKey = await vscode.window.showInputBox({
+        prompt: "Anthropic/Claude API Key eingeben",
+        password: true,
+        placeHolder: "sk-ant-...",
+      });
 
-  let context = "";
-  for (let i = startLine; i <= endLine; i++) {
-    context += editor.document.lineAt(i).text + "\n";
-  }
+      if (apiKey) {
+        // Teste den Key sofort
+        vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Teste Anthropic API Key...",
+            cancellable: false,
+          },
+          async () => {
+            const testResult = await generator?.testAnthropicKey(apiKey);
 
-  return context.trim();
-}
+            if (testResult?.valid) {
+              // Speichere nur wenn gültig
+              await context.secrets.store("anthropic.apiKey", apiKey);
+              vscode.window.showInformationMessage(testResult.message);
 
-async function insertComment(
-  editor: vscode.TextEditor,
-  position: vscode.Position,
-  comment: string
-) {
-  const edit = new vscode.WorkspaceEdit();
-  const insertPosition = new vscode.Position(position.line, 0);
-
-  // Formatiere Kommentar mit korrekter Einrückung
-  const lineText = editor.document.lineAt(position.line).text;
-  const indentation = lineText.match(/^\s*/)?.[0] || "";
-  const formattedComment =
-    comment
-      .split("\n")
-      .map((line) => indentation + line)
-      .join("\n") + "\n";
-
-  edit.insert(editor.document.uri, insertPosition, formattedComment);
-
-  await vscode.workspace.applyEdit(edit);
-
-  // Cursor nach dem Kommentar positionieren
-  const newPosition = new vscode.Position(
-    position.line + comment.split("\n").length,
-    0
+              // Neu initialisieren
+              await generator?.initializeAI();
+            } else {
+              // Zeige Fehler, speichere nicht
+              vscode.window.showErrorMessage(
+                testResult?.message || "API Key ungültig"
+              );
+            }
+          }
+        );
+      }
+    }
   );
-  editor.selection = new vscode.Selection(newPosition, newPosition);
-}
 
-async function showApiConfiguration() {
-  const items = [
-    {
-      label: "$(key) OpenAI API Key konfigurieren",
-      description: "ChatGPT Integration",
-      action: "openai",
-    },
-    {
-      label: "$(key) Anthropic API Key konfigurieren",
-      description: "Claude Integration",
-      action: "anthropic",
-    },
-    {
-      label: "$(settings-gear) AI Provider wählen",
-      description: "Zwischen OpenAI, Anthropic oder lokal wählen",
-      action: "provider",
-    },
-    {
-      label: "$(plug) Verbindung testen",
-      description: "API Verbindungen überprüfen",
-      action: "test",
-    },
-    {
-      label: "$(book) Einstellungen öffnen",
-      description: "Alle Voice Doc Einstellungen",
-      action: "settings",
-    },
-  ];
+  // 8. Test Commands für API Keys
+  const testOpenAIKeyCommand = vscode.commands.registerCommand(
+    "voiceDocs.testOpenAI",
+    async () => {
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Teste OpenAI API Key...",
+          cancellable: false,
+        },
+        async () => {
+          const result = await generator?.testOpenAIKey();
 
-  const selection = await vscode.window.showQuickPick(items, {
-    placeHolder: "Was möchten Sie konfigurieren?",
-  });
+          if (!result) {
+            vscode.window.showErrorMessage("Kein Generator initialisiert");
+            return;
+          }
 
-  if (!selection) {
-    return;
-  }
+          // Zeige detailliertes Ergebnis
+          if (result.valid) {
+            const action = await vscode.window.showInformationMessage(
+              result.message,
+              "Details"
+            );
 
-  switch (selection.action) {
-    case "openai":
-      await configureOpenAI();
-      break;
-    case "anthropic":
-      await configureAnthropic();
-      break;
-    case "provider":
-      await selectAIProvider();
-      break;
-    case "test":
-      await testAIConnections();
-      break;
-    case "settings":
-      vscode.commands.executeCommand(
-        "workbench.action.openSettings",
-        "voiceDoc"
-      );
-      break;
-  }
-}
-
-async function configureOpenAI() {
-  const apiKey = await vscode.window.showInputBox({
-    prompt: "OpenAI API Key eingeben",
-    password: true,
-    placeHolder: "sk-...",
-    validateInput: (value) => {
-      if (!value || !value.startsWith("sk-")) {
-        return 'API Key muss mit "sk-" beginnen';
-      }
-      return null;
-    },
-  });
-
-  if (apiKey) {
-    await vscode.workspace
-      .getConfiguration("voiceDoc")
-      .update("openai.apiKey", apiKey, vscode.ConfigurationTarget.Global);
-
-    // Test der Verbindung
-    vscode.window.showInformationMessage(
-      "OpenAI API Key gespeichert. Teste Verbindung..."
-    );
-    const testResult = await aiService.testConnection();
-
-    if (testResult.openai) {
-      vscode.window.showInformationMessage("✅ OpenAI Verbindung erfolgreich!");
-    } else {
-      vscode.window.showErrorMessage(
-        "❌ OpenAI Verbindung fehlgeschlagen. Prüfen Sie Ihren API Key."
+            if (action === "Details") {
+              const quickPick = vscode.window.createQuickPick();
+              quickPick.title = "OpenAI API Status";
+              quickPick.items = [
+                { label: "✅ Status", description: "API Key ist gültig" },
+                { label: "🤖 Model", description: result.model || "Unbekannt" },
+                {
+                  label: "🔑 Key",
+                  description:
+                    "***" +
+                    (await context.secrets.get("openai.apiKey"))?.slice(-4),
+                },
+              ];
+              quickPick.show();
+            }
+          } else {
+            vscode.window.showErrorMessage(result.message);
+          }
+        }
       );
     }
-  }
-}
+  );
 
-async function configureAnthropic() {
-  const apiKey = await vscode.window.showInputBox({
-    prompt: "Anthropic API Key eingeben",
-    password: true,
-    placeHolder: "sk-ant-...",
-    validateInput: (value) => {
-      if (!value || !value.startsWith("sk-ant-")) {
-        return 'API Key muss mit "sk-ant-" beginnen';
-      }
-      return null;
-    },
-  });
+  const testAnthropicKeyCommand = vscode.commands.registerCommand(
+    "voiceDocs.testAnthropic",
+    async () => {
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Teste Anthropic API Key...",
+          cancellable: false,
+        },
+        async () => {
+          const result = await generator?.testAnthropicKey();
 
-  if (apiKey) {
-    await vscode.workspace
-      .getConfiguration("voiceDoc")
-      .update("anthropic.apiKey", apiKey, vscode.ConfigurationTarget.Global);
+          if (!result) {
+            vscode.window.showErrorMessage("Kein Generator initialisiert");
+            return;
+          }
 
-    // Test der Verbindung
-    vscode.window.showInformationMessage(
-      "Anthropic API Key gespeichert. Teste Verbindung..."
-    );
-    const testResult = await aiService.testConnection();
+          // Zeige detailliertes Ergebnis
+          if (result.valid) {
+            const action = await vscode.window.showInformationMessage(
+              result.message,
+              "Details"
+            );
 
-    if (testResult.anthropic) {
-      vscode.window.showInformationMessage("✅ Claude Verbindung erfolgreich!");
-    } else {
-      vscode.window.showErrorMessage(
-        "❌ Claude Verbindung fehlgeschlagen. Prüfen Sie Ihren API Key."
+            if (action === "Details") {
+              const quickPick = vscode.window.createQuickPick();
+              quickPick.title = "Anthropic API Status";
+              quickPick.items = [
+                { label: "✅ Status", description: "API Key ist gültig" },
+                { label: "🤖 Model", description: result.model || "Unbekannt" },
+                {
+                  label: "🔑 Key",
+                  description:
+                    "***" +
+                    (await context.secrets.get("anthropic.apiKey"))?.slice(-4),
+                },
+              ];
+              quickPick.show();
+            }
+          } else {
+            vscode.window.showErrorMessage(result.message);
+          }
+        }
       );
     }
-  }
-}
+  );
 
-async function selectAIProvider() {
-  const providers = [
-    {
-      label: "Lokale Verarbeitung",
-      description: "Nur lokale Textverarbeitung",
-      value: "local",
-    },
-    {
-      label: "OpenAI ChatGPT",
-      description: "Erfordert OpenAI API Key",
-      value: "openai",
-    },
-    {
-      label: "Anthropic Claude",
-      description: "Erfordert Anthropic API Key",
-      value: "anthropic",
-    },
-  ];
+  // 9. Test alle Keys Command
+  const testAllKeysCommand = vscode.commands.registerCommand(
+    "voiceDocs.testAllKeys",
+    async () => {
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Teste alle API Keys...",
+          cancellable: false,
+        },
+        async () => {
+          const results = await generator?.testAllKeys();
 
-  const selection = await vscode.window.showQuickPick(providers, {
-    placeHolder: "AI Provider auswählen",
-  });
+          if (!results) {
+            vscode.window.showErrorMessage("Kein Generator initialisiert");
+            return;
+          }
 
-  if (selection) {
-    await vscode.workspace
-      .getConfiguration("voiceDoc")
-      .update("aiProvider", selection.value, vscode.ConfigurationTarget.Global);
+          // Erstelle Übersicht
+          const items: vscode.QuickPickItem[] = [];
 
-    vscode.window.showInformationMessage(
-      `AI Provider auf ${selection.label} gesetzt`
-    );
-  }
-}
+          if (results.openai) {
+            items.push({
+              label: results.openai.valid ? "✅ OpenAI" : "❌ OpenAI",
+              description: results.openai.message,
+              detail: results.openai.model
+                ? `Model: ${results.openai.model}`
+                : undefined,
+            });
+          } else {
+            items.push({
+              label: "⚠️ OpenAI",
+              description: "Kein API Key konfiguriert",
+            });
+          }
 
-async function testAIConnections() {
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: "Voice Doc",
-      cancellable: false,
-    },
-    async (progress) => {
-      progress.report({ message: "Teste AI Verbindungen..." });
+          if (results.anthropic) {
+            items.push({
+              label: results.anthropic.valid ? "✅ Anthropic" : "❌ Anthropic",
+              description: results.anthropic.message,
+              detail: results.anthropic.model
+                ? `Model: ${results.anthropic.model}`
+                : undefined,
+            });
+          } else {
+            items.push({
+              label: "⚠️ Anthropic",
+              description: "Kein API Key konfiguriert",
+            });
+          }
 
-      const results = await aiService.testConnection();
+          const quickPick = vscode.window.createQuickPick();
+          quickPick.title = "API Keys Status";
+          quickPick.items = items;
+          quickPick.show();
+        }
+      );
+    }
+  );
 
-      let message = "AI Verbindungstest:\n";
-      message += `OpenAI: ${results.openai ? "✅" : "❌"}\n`;
-      message += `Anthropic: ${results.anthropic ? "✅" : "❌"}`;
+  // 10. Kommentar-Validierung
+  const validateCommentCommand = vscode.commands.registerCommand(
+    "voiceDocs.validateComment",
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return;
 
-      if (results.openai || results.anthropic) {
+      const position = editor.selection.active;
+      const line = editor.document.lineAt(position.line);
+      const commentText = line.text.trim();
+
+      if (generator) {
+        const validation = generator.validateComment(commentText);
+
+        const message =
+          `Kommentar-Qualität: ${validation.score}/100\n` +
+          `${validation.isValid ? "✅ Gültig" : "❌ Verbesserung nötig"}\n` +
+          `${validation.suggestions.join("\n")}`;
+
         vscode.window.showInformationMessage(message);
-      } else {
-        vscode.window.showWarningMessage(
-          message + "\n\nKonfigurieren Sie mindestens einen API Key."
+      }
+    }
+  );
+
+  // 9. Quick Pick für AI Provider
+  const selectAIProviderCommand = vscode.commands.registerCommand(
+    "voiceDocs.selectProvider",
+    async () => {
+      const provider = await vscode.window.showQuickPick(
+        [
+          "OpenAI (GPT-4)",
+          "Anthropic (Claude)",
+          "Keine AI (nur Basis-Verarbeitung)",
+        ],
+        {
+          placeHolder: "Wählen Sie den AI-Provider",
+        }
+      );
+
+      if (provider) {
+        let configValue = "none";
+        if (provider.includes("OpenAI")) configValue = "openai";
+        if (provider.includes("Anthropic")) configValue = "anthropic";
+
+        await vscode.workspace
+          .getConfiguration("voiceDocs")
+          .update("aiProvider", configValue, vscode.ConfigurationTarget.Global);
+
+        vscode.window.showInformationMessage(
+          `AI Provider geändert zu: ${provider}`
         );
       }
     }
   );
-}
 
-function updateStatusBarItem(recording: boolean) {
-  if (recording) {
-    recordingStatusBarItem.text = "$(debug-stop) Recording...";
-    recordingStatusBarItem.command = "voiceDoc.stopRecording";
-    recordingStatusBarItem.tooltip = "Stop Voice Recording";
-    recordingStatusBarItem.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.warningBackground"
-    );
-  } else {
-    recordingStatusBarItem.text = "$(record) Voice Doc";
-    recordingStatusBarItem.command = "voiceDoc.startRecording";
-    recordingStatusBarItem.tooltip = "Start Voice Documentation Recording";
-    recordingStatusBarItem.backgroundColor = undefined;
-  }
-}
+  // === Konfiguration überwachen ===
+  vscode.workspace.onDidChangeConfiguration(async (e) => {
+    if (e.affectsConfiguration("voiceDocs")) {
+      // Neu laden bei Konfigurations-Änderungen
+      await generator?.initializeAI();
+      vscode.window.showInformationMessage(
+        "Voice Docs Konfiguration aktualisiert"
+      );
+    }
+  });
 
-async function showWelcomeMessage(context: vscode.ExtensionContext) {
-  const selection = await vscode.window.showInformationMessage(
-    "Willkommen bei Voice Documentation! 🎤",
-    "API konfigurieren",
-    "Später"
+  // === Registriere alle Kommandos ===
+  context.subscriptions.push(
+    toggleRecordingCommand,
+    quickInputCommand,
+    multiStepCommand,
+    clipboardCommand,
+    systemVoiceCommand,
+    enhanceTextCommand,
+    configureOpenAICommand,
+    configureAnthropicCommand,
+    testOpenAIKeyCommand,
+    testAnthropicKeyCommand,
+    testAllKeysCommand,
+    validateCommentCommand,
+    selectAIProviderCommand
   );
 
-  if (selection === "API konfigurieren") {
-    await showApiConfiguration();
+  // === Initiale Prüfungen ===
+
+  // Prüfe ob API Keys vorhanden sind
+  const hasOpenAI = await context.secrets.get("openai.apiKey");
+  const hasAnthropic = await context.secrets.get("anthropic.apiKey");
+
+  if (!hasOpenAI && !hasAnthropic) {
+    const action = await vscode.window.showInformationMessage(
+      "Voice Documentation: Keine API Keys konfiguriert. Möchten Sie jetzt einen API Key hinzufügen?",
+      "OpenAI",
+      "Anthropic",
+      "Später"
+    );
+
+    if (action === "OpenAI") {
+      await vscode.commands.executeCommand("voiceDocs.configureOpenAI");
+    } else if (action === "Anthropic") {
+      await vscode.commands.executeCommand("voiceDocs.configureAnthropic");
+    }
   }
 
-  context.globalState.update("voiceDoc.hasShownWelcome", true);
+  console.log("Voice Documentation Extension erfolgreich aktiviert!");
+
+  // Zeige Willkommensnachricht
+  vscode.window.showInformationMessage(
+    'Voice Documentation bereit! Klicken Sie auf "Voice Docs" in der Statusleiste oder nutzen Sie Ctrl+Shift+V'
+  );
 }
 
+/**
+ * Deaktiviert die Extension
+ */
 export function deactivate() {
-  if (recordingStatusBarItem) {
-    recordingStatusBarItem.dispose();
+  console.log("Voice Documentation Extension wird deaktiviert...");
+
+  // Cleanup
+  if (voiceHandler) {
+    voiceHandler.dispose();
+    voiceHandler = null;
   }
-  console.log("Voice Documentation Plugin deaktiviert");
+
+  generator = null;
+
+  console.log("Voice Documentation Extension deaktiviert");
 }

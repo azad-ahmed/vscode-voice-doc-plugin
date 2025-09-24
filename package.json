@@ -1,52 +1,43 @@
 {
   "name": "vscode-voice-doc-plugin",
-  "displayName": "Voice Documentation Plugin",
-  "description": "AI-powered voice documentation for code using ChatGPT and Claude with Speech-to-Text",
+  "displayName": "Voice Documentation with AI",
+  "description": "KI-gestützte Code-Dokumentation per Spracheingabe - verwandelt gesprochene Erklärungen automatisch in professionelle Code-Kommentare",
   "version": "1.0.0",
   "publisher": "azad-ahmed",
   "author": {
     "name": "Azad Ahmed",
-    "email": "azad.ahmed@example.com"
+    "email": "your-email@example.com"
   },
-  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/azad-ahmed/vscode-voice-doc-plugin.git"
   },
-  "homepage": "https://github.com/azad-ahmed/vscode-voice-doc-plugin#readme",
-  "bugs": {
-    "url": "https://github.com/azad-ahmed/vscode-voice-doc-plugin/issues"
+  "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#667eea",
+    "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.70.0",
-    "node": ">=16.0.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
+    "Programming Languages",
     "Other",
     "Machine Learning",
-    "Documentation",
-    "AI",
-    "Productivity"
+    "Snippets"
   ],
   "keywords": [
     "voice",
+    "speech",
     "documentation",
-    "ai",
-    "chatgpt",
-    "claude",
-    "speech-to-text",
     "comments",
-    "azure",
-    "openai",
-    "anthropic",
-    "code-documentation",
-    "voice-recognition"
+    "AI",
+    "ChatGPT",
+    "Claude",
+    "German",
+    "JSDoc"
   ],
-  "icon": "resources/icon.png",
-  "galleryBanner": {
-    "color": "#1e1e1e",
-    "theme": "dark"
-  },
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -54,353 +45,312 @@
   "contributes": {
     "commands": [
       {
-        "command": "voiceDoc.startRecording",
-        "title": "Start Voice Recording",
-        "category": "Voice Doc",
-        "icon": "$(record)"
+        "command": "voiceDocs.toggleRecording",
+        "title": "Voice Docs: Sprachdokumentation starten",
+        "category": "Voice Documentation",
+        "icon": "$(mic)"
       },
       {
-        "command": "voiceDoc.stopRecording",
-        "title": "Stop Voice Recording",
-        "category": "Voice Doc",
-        "icon": "$(debug-stop)"
+        "command": "voiceDocs.quickInput",
+        "title": "Voice Docs: Text direkt eingeben",
+        "category": "Voice Documentation",
+        "icon": "$(keyboard)"
       },
       {
-        "command": "voiceDoc.configureApi",
-        "title": "Configure AI APIs",
-        "category": "Voice Doc",
-        "icon": "$(settings-gear)"
+        "command": "voiceDocs.multiStep",
+        "title": "Voice Docs: Strukturierte Eingabe",
+        "category": "Voice Documentation",
+        "icon": "$(checklist)"
       },
       {
-        "command": "voiceDoc.testConnection",
-        "title": "Test AI Connection",
-        "category": "Voice Doc",
-        "icon": "$(plug)"
+        "command": "voiceDocs.clipboard",
+        "title": "Voice Docs: Clipboard-Methode",
+        "category": "Voice Documentation",
+        "icon": "$(clippy)"
       },
       {
-        "command": "voiceDoc.showHistory",
-        "title": "Show Voice Documentation History",
-        "category": "Voice Doc",
-        "icon": "$(history)"
+        "command": "voiceDocs.systemVoice",
+        "title": "Voice Docs: System-Spracherkennung",
+        "category": "Voice Documentation",
+        "icon": "$(unmute)"
       },
       {
-        "command": "voiceDoc.clearHistory",
-        "title": "Clear Voice Documentation History",
-        "category": "Voice Doc",
-        "icon": "$(clear-all)"
+        "command": "voiceDocs.enhanceText",
+        "title": "Voice Docs: Ausgewählten Text mit AI verbessern",
+        "category": "Voice Documentation",
+        "icon": "$(sparkle)"
       },
       {
-        "command": "voiceDoc.exportSettings",
-        "title": "Export Settings",
-        "category": "Voice Doc",
-        "icon": "$(export)"
+        "command": "voiceDocs.configureOpenAI",
+        "title": "Voice Docs: OpenAI API Key konfigurieren",
+        "category": "Voice Documentation",
+        "icon": "$(key)"
       },
       {
-        "command": "voiceDoc.importSettings",
-        "title": "Import Settings",
-        "category": "Voice Doc",
-        "icon": "$(import)"
+        "command": "voiceDocs.configureAnthropic",
+        "title": "Voice Docs: Anthropic/Claude API Key konfigurieren",
+        "category": "Voice Documentation",
+        "icon": "$(key)"
+      },
+      {
+        "command": "voiceDocs.testOpenAI",
+        "title": "Voice Docs: OpenAI API Key testen",
+        "category": "Voice Documentation",
+        "icon": "$(testing-passed-icon)"
+      },
+      {
+        "command": "voiceDocs.testAnthropic",
+        "title": "Voice Docs: Anthropic API Key testen",
+        "category": "Voice Documentation",
+        "icon": "$(testing-passed-icon)"
+      },
+      {
+        "command": "voiceDocs.testAllKeys",
+        "title": "Voice Docs: Alle API Keys testen",
+        "category": "Voice Documentation",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "voiceDocs.validateComment",
+        "title": "Voice Docs: Kommentar-Qualität prüfen",
+        "category": "Voice Documentation"
+      },
+      {
+        "command": "voiceDocs.selectProvider",
+        "title": "Voice Docs: AI Provider auswählen",
+        "category": "Voice Documentation"
       }
     ],
     "keybindings": [
       {
-        "command": "voiceDoc.startRecording",
+        "command": "voiceDocs.toggleRecording",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
         "when": "editorTextFocus"
       },
       {
-        "command": "voiceDoc.stopRecording",
-        "key": "ctrl+shift+s",
-        "mac": "cmd+shift+s",
-        "when": "voiceDoc.isRecording"
+        "command": "voiceDocs.enhanceText",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
       },
       {
-        "command": "voiceDoc.configureApi",
-        "key": "ctrl+shift+alt+v",
-        "mac": "cmd+shift+alt+v"
+        "command": "voiceDocs.testAllKeys",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "when": "editorTextFocus",
-          "command": "voiceDoc.startRecording",
-          "group": "voice-doc@1"
+          "command": "voiceDocs.addCommentHere",
+          "group": "voiceDocs@1",
+          "when": "editorTextFocus"
         },
         {
-          "when": "voiceDoc.isRecording",
-          "command": "voiceDoc.stopRecording",
-          "group": "voice-doc@2"
+          "command": "voiceDocs.enhanceText",
+          "group": "voiceDocs@2",
+          "when": "editorHasSelection"
         }
       ],
       "editor/title": [
         {
-          "when": "editorTextFocus",
-          "command": "voiceDoc.startRecording",
-          "group": "navigation@1"
+          "command": "voiceDocs.startVoice",
+          "group": "navigation",
+          "when": "editorTextFocus"
         }
       ],
       "commandPalette": [
         {
-          "command": "voiceDoc.startRecording",
-          "when": "editorTextFocus"
+          "command": "voiceDocs.startVoice",
+          "when": "editorIsOpen"
         },
         {
-          "command": "voiceDoc.stopRecording",
-          "when": "voiceDoc.isRecording"
-        }
-      ],
-      "view/title": [
+          "command": "voiceDocs.stopVoice",
+          "when": "editorIsOpen"
+        },
         {
-          "command": "voiceDoc.clearHistory",
-          "when": "view == voiceDocHistory",
-          "group": "navigation"
+          "command": "voiceDocs.enhanceText",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "voiceDocs.validateComment"
+        },
+        {
+          "command": "voiceDocs.selectProvider"
+        },
+        {
+          "command": "voiceDocs.configureOpenAI"
+        },
+        {
+          "command": "voiceDocs.configureAnthropic"
         }
       ]
     },
-    "views": {
-      "explorer": [
-        {
-          "id": "voiceDocHistory",
-          "name": "Voice Documentation History",
-          "when": "voiceDoc.hasHistory"
-        }
-      ]
-    },
-    "viewsWelcome": [
-      {
-        "view": "voiceDocHistory",
-        "contents": "No voice documentation history yet.\n[Start Recording](command:voiceDoc.startRecording)"
-      }
-    ],
     "configuration": {
       "title": "Voice Documentation",
       "properties": {
-        "voiceDoc.general.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable Voice Documentation plugin",
-          "order": 0
-        },
-        "voiceDoc.openai.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "OpenAI API Key for ChatGPT integration (stored securely)",
-          "scope": "application",
-          "order": 1
-        },
-        "voiceDoc.anthropic.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Anthropic API Key for Claude integration (stored securely)",
-          "scope": "application",
-          "order": 2
-        },
-        "voiceDoc.azure.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Azure Speech Services API Key",
-          "scope": "application",
-          "order": 3
-        },
-        "voiceDoc.azure.region": {
-          "type": "string",
-          "default": "westeurope",
-          "description": "Azure Speech Services region",
-          "scope": "application",
-          "order": 4
-        },
-        "voiceDoc.aiProvider": {
+        "voiceDocs.aiProvider": {
           "type": "string",
           "enum": [
-            "local",
             "openai",
-            "anthropic"
+            "anthropic",
+            "none"
           ],
-          "default": "local",
-          "description": "Choose AI provider for comment enhancement",
+          "default": "openai",
+          "description": "Welcher AI-Provider soll für die Textverbesserung verwendet werden?",
           "enumDescriptions": [
-            "Use local text processing only",
-            "Use OpenAI ChatGPT for enhanced comments",
-            "Use Anthropic Claude for enhanced comments"
-          ],
-          "order": 5
+            "OpenAI GPT (ChatGPT)",
+            "Anthropic Claude",
+            "Keine AI-Verbesserung (nur Basis-Textverarbeitung)"
+          ]
         },
-        "voiceDoc.speechProvider": {
+        "voiceDocs.openaiModel": {
           "type": "string",
           "enum": [
-            "browser",
-            "azure"
-          ],
-          "default": "browser",
-          "description": "Choose Speech-to-Text provider",
-          "enumDescriptions": [
-            "Use browser's built-in speech recognition",
-            "Use Azure Speech Services (requires API key)"
-          ],
-          "order": 6
-        },
-        "voiceDoc.openai.model": {
-          "type": "string",
-          "enum": [
-            "gpt-4",
+            "gpt-4o",
+            "gpt-4o-mini",
             "gpt-4-turbo",
-            "gpt-4-turbo-preview",
-            "gpt-3.5-turbo",
-            "gpt-3.5-turbo-16k"
+            "gpt-3.5-turbo"
           ],
-          "default": "gpt-3.5-turbo",
-          "description": "OpenAI model to use",
-          "order": 7
+          "default": "gpt-4o-mini",
+          "description": "OpenAI Modell für die Textverbesserung"
         },
-        "voiceDoc.anthropic.model": {
+        "voiceDocs.anthropicModel": {
           "type": "string",
           "enum": [
+            "claude-3-opus-20240229",
             "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307",
-            "claude-3-opus-20240229"
+            "claude-3-haiku-20240307"
           ],
           "default": "claude-3-haiku-20240307",
-          "description": "Anthropic Claude model to use",
-          "order": 8
+          "description": "Anthropic Claude Modell für die Textverbesserung"
         },
-        "voiceDoc.language": {
+        "voiceDocs.language": {
           "type": "string",
           "enum": [
-            "auto",
             "de-DE",
             "en-US",
+            "en-GB",
             "fr-FR",
-            "es-ES",
-            "it-IT"
+            "es-ES"
           ],
-          "default": "auto",
-          "description": "Speech recognition language",
-          "order": 9
-        },
-        "voiceDoc.commentStyle": {
-          "type": "string",
-          "enum": [
-            "inline",
-            "block",
-            "docstring"
-          ],
-          "default": "inline",
-          "description": "Preferred comment style",
+          "default": "de-DE",
+          "description": "Sprache für die Spracherkennung",
           "enumDescriptions": [
-            "Single line comments (//)",
-            "Multi-line block comments (/* */)",
-            "Documentation comments (/** */)"
-          ],
-          "order": 10
+            "Deutsch (Deutschland)",
+            "English (US)",
+            "English (UK)",
+            "Français",
+            "Español"
+          ]
         },
-        "voiceDoc.autoFormat": {
+        "voiceDocs.autoInsert": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically format generated comments",
-          "order": 11
+          "description": "Kommentare automatisch an der richtigen Stelle im Code einfügen"
         },
-        "voiceDoc.showPreview": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show preview before inserting comments",
-          "order": 12
-        },
-        "voiceDoc.recordingTimeout": {
+        "voiceDocs.serverPort": {
           "type": "number",
-          "default": 30,
-          "minimum": 5,
-          "maximum": 300,
-          "description": "Maximum recording time in seconds",
-          "order": 13
+          "default": 9000,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "HTTP Port für den lokalen Voice Server"
         },
-        "voiceDoc.confidenceThreshold": {
+        "voiceDocs.websocketPort": {
           "type": "number",
-          "default": 0.7,
-          "minimum": 0.1,
-          "maximum": 1.0,
-          "description": "Minimum confidence threshold for speech recognition",
-          "order": 14
+          "default": 9001,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "WebSocket Port für die Echtzeitkommunikation"
         },
-        "voiceDoc.enableHistory": {
-          "type": "boolean",
-          "default": true,
-          "description": "Keep history of generated voice documentation",
-          "order": 15
-        },
-        "voiceDoc.maxHistoryItems": {
+        "voiceDocs.debounceDelay": {
           "type": "number",
-          "default": 100,
-          "minimum": 10,
+          "default": 200,
+          "minimum": 100,
           "maximum": 1000,
-          "description": "Maximum number of history items to keep",
-          "order": 16
+          "description": "Verzögerung für Code-Kontext-Tracking in Millisekunden"
         },
-        "voiceDoc.enableTelemetry": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable anonymous telemetry data collection",
-          "order": 17
+        "voiceDocs.maxCommentLength": {
+          "type": "number",
+          "default": 500,
+          "minimum": 100,
+          "maximum": 2000,
+          "description": "Maximale Länge eines generierten Kommentars in Zeichen"
         },
-        "voiceDoc.debug": {
+        "voiceDocs.removeFillerWords": {
           "type": "boolean",
-          "default": false,
-          "description": "Enable debug logging",
-          "order": 18
+          "default": true,
+          "description": "Füllwörter wie 'äh', 'ähm', 'also' automatisch entfernen"
+        },
+        "voiceDocs.useJSDoc": {
+          "type": "boolean",
+          "default": true,
+          "description": "JSDoc-Format für JavaScript/TypeScript Funktionen verwenden"
+        },
+        "voiceDocs.aiTemperature": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "AI Kreativität (0 = deterministisch, 1 = kreativ)"
+        },
+        "voiceDocs.autoOpenBrowser": {
+          "type": "boolean",
+          "default": true,
+          "description": "Browser automatisch öffnen beim Start der Sprachaufnahme"
         }
-      }
-    },
-    "configurationDefaults": {
-      "files.associations": {
-        "*.voice-doc": "json"
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile && npm run lint",
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "lint:fix": "eslint src --ext ts --fix",
     "test": "node ./out/test/runTest.js",
-    "package": "vsce package",
-    "publish": "vsce publish",
-    "deploy": "npm run package",
     "clean": "rimraf out",
-    "prebuild": "npm run clean",
-    "build": "npm run compile"
-  },
-  "dependencies": {
-    "node-fetch": "^2.6.12",
-    "axios": "^1.6.0",
-    "ws": "^8.14.2"
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
-    "@types/vscode": "^1.70.0",
-    "@types/node": "18.x",
-    "@types/node-fetch": "^2.6.4",
-    "@types/ws": "^8.5.8",
-    "@typescript-eslint/eslint-plugin": "^6.7.0",
-    "@typescript-eslint/parser": "^6.7.0",
-    "@vscode/test-electron": "^2.3.4",
-    "eslint": "^8.50.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
     "rimraf": "^5.0.5",
-    "typescript": "^5.2.2",
-    "@vscode/vsce": "^2.21.1"
+    "typescript": "^5.3.3"
   },
-  "extensionDependencies": [],
-  "extensionPack": [],
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "openai": "^4.56.0",
+    "ws": "^8.16.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Diese Extension benötigt Zugriff auf lokale Server und API Keys"
+    }
+  },
   "badges": [
     {
-      "url": "https://img.shields.io/badge/AI-Powered-blue",
-      "href": "https://github.com/azad-ahmed/vscode-voice-doc-plugin",
-      "description": "AI-Powered Documentation"
+      "url": "https://img.shields.io/badge/VS%20Code-1.85%2B-blue",
+      "href": "https://code.visualstudio.com/",
+      "description": "Minimum VS Code version"
+    },
+    {
+      "url": "https://img.shields.io/badge/AI-GPT%20%26%20Claude-green",
+      "href": "https://openai.com/",
+      "description": "AI-powered documentation"
     }
   ],
-  "qna": "https://github.com/azad-ahmed/vscode-voice-doc-plugin/discussions",
-  "sponsor": {
-    "url": "https://github.com/sponsors/azad-ahmed"
+  "__metadata": {
+    "publisherDisplayName": "Azad Ahmed",
+    "installedTimestamp": 1700000000000
   }
 }
