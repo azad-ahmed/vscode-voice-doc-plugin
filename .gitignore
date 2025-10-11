@@ -18,12 +18,16 @@ coverage/
 # Logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
 # Audio files (recordings)
 *.wav
 *.mp3
 *.ogg
 *.m4a
+*.aac
 
 # Environment files
 .env
@@ -34,24 +38,24 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+*.swp
+*.swo
+*~
 
 # IDE files
 .vscode/settings.json
 .idea/
 *.swp
-*.swo
-*~
 
 # Temporary files
 temp/
 tmp/
 *.tmp
-
-# Backup files
 *.bak
 *.backup
 
-# Scripts (werden nach Push nicht mehr benötigt)
+# Cleanup scripts (nach erstem Push nicht mehr nötig)
 cleanup-final.ps1
-git-push.ps1
+final-cleanup.ps1
+PROJEKT-ANALYSE.md
 PUSH-ANLEITUNG.md

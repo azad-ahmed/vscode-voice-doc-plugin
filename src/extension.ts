@@ -41,9 +41,6 @@ export function activate(context: vscode.ExtensionContext) {
         voiceHandler = new IntegratedVoiceHandler(context, commentGenerator);
         ErrorHandler.log('Extension', 'VoiceHandler initialisiert', 'success');
 
-        autoCommentMonitor = new AutoCommentMonitor(commentGenerator);
-        ErrorHandler.log('Extension', 'AutoCommentMonitor initialisiert', 'success');
-
         // ✨ NEU: Initialisiere erweiterte Features
         outputChannel.appendLine('Initialisiere erweiterte Features...');
         
@@ -59,6 +56,9 @@ export function activate(context: vscode.ExtensionContext) {
             context
         );
         ErrorHandler.log('Extension', 'AutoModeController initialisiert', 'success');
+
+        autoCommentMonitor = new AutoCommentMonitor(commentGenerator, learningSystem);
+        ErrorHandler.log('Extension', 'AutoCommentMonitor initialisiert', 'success');
 
         statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         statusBarItem.command = 'voiceDocPlugin.toggleRecording';
@@ -323,7 +323,6 @@ async function trainFromFeedback() {
         cancellable: false
     }, async () => {
         try {
-            // Hier könnte zusätzliche Training-Logik implementiert werden
             const stats = learningSystem.getStatistics();
             
             vscode.window.showInformationMessage(
@@ -523,43 +522,35 @@ async function analyzeCurrentFile() {
         return;
     }
 
-    const { CodeAnalyzer: FileAnalyzer } = await import('./utils/codeAnalyzer');
-    const analyzer = new FileAnalyzer();
-    
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
         title: 'Analysiere Code...',
         cancellable: false
     }, async () => {
-        const elements = analyzer.analyzeDocument(editor.document);
-        const uncommented = elements.filter(el => !el.hasComment);
-        
-        const message = `
+        try {
+            // Verwende den bereits initialisierten codeAnalyzer
+            const codeContext = {
+                code: editor.document.getText(),
+                line: editor.selection.active.line,
+                languageId: editor.document.languageId,
+                functionName: 'current-file',
+                functionType: 'code' as const
+            };
+
+            const result = await codeAnalyzer.analyzeCode(codeContext);
+            
+            const message = `
 📊 Code-Analyse Ergebnis:
 
-Gesamt: ${elements.length} Elemente gefunden
-• Funktionen: ${elements.filter(el => el.type === 'function').length}
-• Klassen: ${elements.filter(el => el.type === 'class').length}
-• Methoden: ${elements.filter(el => el.type === 'method').length}
+Beschreibung: ${result.description}
+${result.details ? `Details: ${result.details}` : ''}
+Konfidenz: ${Math.round(result.confidence * 100)}%
+            `.trim();
 
-❌ Ohne Kommentar: ${uncommented.length}
-✅ Mit Kommentar: ${elements.length - uncommented.length}
-        `.trim();
-
-        if (uncommented.length > 0) {
-            const action = await vscode.window.showInformationMessage(
-                message,
-                'Kommentare hinzufügen',
-                'Ignorieren'
-            );
-
-            if (action === 'Kommentare hinzufügen') {
-                await ConfigManager.set('autoCommentMode', 'on-save');
-                autoCommentMonitor.start();
-                await editor.document.save();
-            }
-        } else {
             vscode.window.showInformationMessage(message);
+            
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Analyse fehlgeschlagen: ${error.message}`);
         }
     });
 }
