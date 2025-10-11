@@ -3,21 +3,31 @@ import * as https from 'https';
 import { ConfigManager } from './utils/configManager';
 import { ErrorHandler } from './utils/errorHandler';
 
-
+/**
+ * CommentGenerator Klasse
+ * Generiert und formatiert Code-Kommentare aus Spracheingaben
+ * VERBESSERTE VERSION mit Timeout und besserer Fehlerbehandlung
+ */
 export class CommentGenerator {
     private language: string;
     private openAIApiKey?: string;
-    private requestTimeout: number = 30000;
+    private requestTimeout: number = 30000; // 30 Sekunden Timeout
 
     constructor(language: string = 'auto') {
         this.language = language;
         this.loadConfiguration();
     }
 
+    /**
+     * Lädt die Konfiguration aus VS Code Settings
+     */
     private async loadConfiguration(): Promise<void> {
         this.openAIApiKey = await ConfigManager.getSecret('openAIApiKey');
     }
 
+    /**
+     * Hauptmethode: Formatiert einen transkribierten Text zu einem Code-Kommentar
+     */
     public formatComment(transcript: string, languageId: string): string {
         if (!transcript || transcript.trim().length === 0) {
             return '// Keine Spracheingabe erkannt';
@@ -28,6 +38,9 @@ export class CommentGenerator {
         return this.generateCommentForLanguage(processedText, languageId);
     }
 
+    /**
+     * Generiert kontextbasierte Kommentare mit optionaler KI-Verbesserung
+     */
     public async generateContextualComment(transcript: string, codeContext: string): Promise<string> {
         const baseComment = this.formatComment(transcript, 'typescript');
         
@@ -38,7 +51,7 @@ export class CommentGenerator {
             } catch (error) {
                 ErrorHandler.handleWarning(
                     'CommentGenerator',
-                    'OpenAI-Verbesserung nicht verfügbar, verwende Standard-Formatierung',
+                    'OpenAI-Verbesserung fehlgeschlagen, verwende Basis-Kommentar',
                     false
                 );
                 return baseComment;
@@ -48,6 +61,10 @@ export class CommentGenerator {
         return baseComment;
     }
 
+    /**
+     * Verbessert Text mit OpenAI API
+     * FIX: Mit Timeout und besserer Fehlerbehandlung
+     */
     public async enhanceWithOpenAI(transcript: string, codeContext: string | null): Promise<string> {
         if (!this.openAIApiKey) {
             throw new Error('OpenAI API Key nicht konfiguriert');
@@ -82,9 +99,10 @@ export class CommentGenerator {
                     'Authorization': `Bearer ${this.openAIApiKey}`,
                     'Content-Length': Buffer.byteLength(requestBody)
                 },
-                timeout: this.requestTimeout
+                timeout: this.requestTimeout // FIX: Timeout hinzugefügt
             };
 
+            // FIX: Timeout Handler
             let timeoutHandle: NodeJS.Timeout;
             let hasTimedOut = false;
 
@@ -96,12 +114,13 @@ export class CommentGenerator {
                 });
 
                 res.on('end', () => {
+                    // Clear timeout
                     if (timeoutHandle) {
                         clearTimeout(timeoutHandle);
                     }
 
                     if (hasTimedOut) {
-                        return;
+                        return; // Ignore response if already timed out
                     }
 
                     try {
@@ -112,9 +131,9 @@ export class CommentGenerator {
                         } else {
                             ErrorHandler.log(
                                 'CommentGenerator',
-                                `OpenAI API Fehler: ${res.statusCode}`
+                                `OpenAI API Error: ${res.statusCode} - ${data}`
                             );
-                            resolve(transcript);
+                            resolve(transcript); // Fallback zum Original
                         }
                     } catch (error) {
                         ErrorHandler.handleError('CommentGenerator', error, false);
@@ -130,19 +149,20 @@ export class CommentGenerator {
                 
                 if (!hasTimedOut) {
                     ErrorHandler.handleError('CommentGenerator', error, false);
-                    resolve(transcript);
+                    resolve(transcript); // Fallback zum Original
                 }
             });
 
+            // FIX: Expliziter Timeout
             timeoutHandle = setTimeout(() => {
                 hasTimedOut = true;
                 req.destroy();
                 ErrorHandler.handleWarning(
                     'CommentGenerator',
-                    `OpenAI Request Timeout nach ${this.requestTimeout}ms`,
+                    `OpenAI Request timeout after ${this.requestTimeout}ms`,
                     false
                 );
-                resolve(transcript);
+                resolve(transcript); // Fallback zum Original
             }, this.requestTimeout);
 
             req.write(requestBody);
@@ -150,6 +170,9 @@ export class CommentGenerator {
         });
     }
 
+    /**
+     * Bereinigt das Transkript
+     */
     private cleanTranscript(transcript: string): string {
         return transcript
             .trim()
@@ -160,6 +183,9 @@ export class CommentGenerator {
             .trim();
     }
 
+    /**
+     * Verarbeitet und verbessert den Text
+     */
     private processText(text: string): string {
         if (!text) return text;
         
@@ -169,6 +195,9 @@ export class CommentGenerator {
         return text.charAt(0).toUpperCase() + text.slice(1);
     }
 
+    /**
+     * Ersetzt technische Begriffe
+     */
     private replaceTechnicalTerms(text: string): string {
         const replacements: { [key: string]: string } = {
             'funktion': 'Funktion',
@@ -186,12 +215,7 @@ export class CommentGenerator {
             'schleife': 'Schleife',
             'bedingung': 'Bedingung',
             'datenbank': 'Datenbank',
-            'api': 'API',
-            'interface': 'Interface',
-            'callback': 'Callback',
-            'promise': 'Promise',
-            'async': 'Async',
-            'await': 'Await'
+            'api': 'API'
         };
 
         let result = text;
@@ -203,6 +227,9 @@ export class CommentGenerator {
         return result;
     }
 
+    /**
+     * Verbessert die Satzstruktur
+     */
     private improveSentenceStructure(text: string): string {
         const improvements = [
             { pattern: /^(diese|die|der|das)\s+(.+?)\s+(macht|tut|ist|wird)/i, replacement: '$2 $3' },
@@ -218,6 +245,9 @@ export class CommentGenerator {
         return result;
     }
 
+    /**
+     * Generiert sprachspezifische Kommentare
+     */
     private generateCommentForLanguage(text: string, languageId: string): string {
         const commentStyles = this.getCommentStyle(languageId);
         
@@ -236,6 +266,9 @@ export class CommentGenerator {
         return lines.map(line => `${commentStyles.single} ${line}`).join('\n');
     }
 
+    /**
+     * Gibt den Kommentarstil für eine Programmiersprache zurück
+     */
     private getCommentStyle(languageId: string): {
         single: string;
         multi?: { start: string; end: string };
@@ -256,20 +289,18 @@ export class CommentGenerator {
             'rust': { single: '//', multi: { start: '/*', end: ' */' } },
             'html': { single: '<!--', multi: { start: '<!--', end: '-->' } },
             'css': { single: '//', multi: { start: '/*', end: ' */' } },
-            'scss': { single: '//', multi: { start: '/*', end: ' */' } },
-            'less': { single: '//', multi: { start: '/*', end: ' */' } },
             'sql': { single: '--' },
             'bash': { single: '#' },
-            'shell': { single: '#' },
             'powershell': { single: '#' },
-            'yaml': { single: '#' },
-            'xml': { single: '<!--', multi: { start: '<!--', end: '-->' } },
-            'markdown': { single: '<!--', multi: { start: '<!--', end: '-->' } }
+            'yaml': { single: '#' }
         };
 
         return styles[languageId.toLowerCase()] || { single: '//' };
     }
 
+    /**
+     * Bricht Text in Zeilen um
+     */
     private wrapText(text: string, maxLength: number): string[] {
         const words = text.split(' ');
         const lines: string[] = [];
@@ -288,6 +319,10 @@ export class CommentGenerator {
         return lines;
     }
 
+    /**
+     * Validiert einen Kommentar
+     * FIX: Korrigierte Schwellenwerte basierend auf Dokumentation (60%)
+     */
     public validateComment(comment: string): {
         isValid: boolean;
         score: number;
@@ -313,21 +348,30 @@ export class CommentGenerator {
         }
 
         return {
-            isValid: score >= 60,
+            isValid: score >= 60, // FIX: 60% threshold aus Dokumentation
             score,
             suggestions
         };
     }
 
+    /**
+     * Setzt den OpenAI API Key
+     */
     public async setOpenAIApiKey(apiKey: string): Promise<void> {
         await ConfigManager.setSecret('openAIApiKey', apiKey);
         this.openAIApiKey = apiKey;
     }
 
+    /**
+     * Prüft ob OpenAI verfügbar ist
+     */
     public isOpenAIAvailable(): boolean {
         return !!this.openAIApiKey;
     }
 
+    /**
+     * Setzt den Timeout für Requests
+     */
     public setRequestTimeout(timeoutMs: number): void {
         this.requestTimeout = timeoutMs;
     }

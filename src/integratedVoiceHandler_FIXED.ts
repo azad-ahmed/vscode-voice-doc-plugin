@@ -5,11 +5,10 @@ import { STTFactory } from './stt/factory';
 import { STTProvider } from './stt/types';
 import { ErrorHandler } from './utils/errorHandler';
 import { ConfigManager } from './utils/configManager';
-import { ApiUsageTracker } from './utils/apiUsageTracker';
-import { AudioQualityValidator } from './utils/audioQualityValidator';
 
 /**
- * Verwaltet Audio-Aufnahme und Transkriptions-Workflow
+ * IntegratedVoiceHandler - Verwaltet Audio-Aufnahme und Verarbeitung
+ * VERBESSERTE VERSION mit besserer Fehlerbehandlung und Race Condition Fixes
  */
 export class IntegratedVoiceHandler {
     private generator: CommentGenerator;
@@ -17,7 +16,7 @@ export class IntegratedVoiceHandler {
     private sttProvider: STTProvider | null = null;
     private _isRecording: boolean = false;
     private context: vscode.ExtensionContext;
-    private maxRecordingTimeMs: number = 30000;
+    private maxRecordingTimeMs: number = 30000; // 30 Sekunden
     private recordingTimer: NodeJS.Timeout | null = null;
 
     constructor(context: vscode.ExtensionContext, generator: CommentGenerator) {
@@ -25,9 +24,13 @@ export class IntegratedVoiceHandler {
         this.generator = generator;
         this.recorder = new AudioRecorder();
         
+        // Initialisiere STT Provider
         this.initializeSTTProvider();
     }
 
+    /**
+     * Initialisiert den STT Provider
+     */
     private async initializeSTTProvider(): Promise<void> {
         try {
             this.sttProvider = await STTFactory.createBestAvailableProvider();
@@ -60,10 +63,16 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Gibt zurück ob gerade aufgenommen wird
+     */
     public isRecording(): boolean {
         return this._isRecording;
     }
 
+    /**
+     * Toggle Aufnahme
+     */
     public async toggleRecording(): Promise<void> {
         if (this._isRecording) {
             await this.stopRecording();
@@ -72,6 +81,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Startet die Aufnahme
+     */
     public async startRecording(): Promise<void> {
         try {
             const editor = vscode.window.activeTextEditor;
@@ -87,12 +99,14 @@ export class IntegratedVoiceHandler {
                 return;
             }
 
+            // Starte Audio-Aufnahme
             await this.recorder.start();
             this._isRecording = true;
 
+            // Auto-Stop Timer
             this.recordingTimer = setTimeout(() => {
                 if (this._isRecording) {
-                    ErrorHandler.log('VoiceHandler', 'Automatischer Stopp nach maximaler Aufnahmedauer');
+                    ErrorHandler.log('VoiceHandler', 'Auto-stopping recording after 30 seconds');
                     this.stopRecording();
                 }
             }, this.maxRecordingTimeMs);
@@ -101,16 +115,21 @@ export class IntegratedVoiceHandler {
             ErrorHandler.log('VoiceHandler', 'Aufnahme gestartet', 'success');
 
         } catch (error: any) {
-            this._isRecording = false;
+            this._isRecording = false; // FIX: Reset status on error
             ErrorHandler.handleError('startRecording', error);
         }
     }
 
+    /**
+     * Stoppt die Aufnahme
+     * FIX: Verbesserte Fehlerbehandlung mit Finally-Block
+     */
     public async stopRecording(): Promise<void> {
         if (!this._isRecording) {
             return;
         }
 
+        // Cancel auto-stop timer
         if (this.recordingTimer) {
             clearTimeout(this.recordingTimer);
             this.recordingTimer = null;
@@ -119,44 +138,34 @@ export class IntegratedVoiceHandler {
         let audioPath: string | null = null;
 
         try {
+            // Stoppe Aufnahme und hole Dateipfad
             audioPath = await this.recorder.stop();
             
             vscode.window.showInformationMessage('⏹️ Aufnahme gestoppt. Transkribiere...');
             ErrorHandler.log('VoiceHandler', `Aufnahme gespeichert: ${audioPath}`, 'success');
 
+            // Transkribiere mit Progress-Anzeige
             await this.transcribeAndProcess(audioPath);
 
         } catch (error: any) {
             ErrorHandler.handleError('stopRecording', error);
         } finally {
+            // FIX: Garantiere dass Status zurückgesetzt wird
             this._isRecording = false;
         }
     }
 
+    /**
+     * Transkribiert Audio und verarbeitet das Ergebnis
+     * FIX: Verbesserte Promise-Handhabung ohne Race Conditions
+     */
     private async transcribeAndProcess(audioPath: string): Promise<void> {
         if (!this.sttProvider) {
             throw new Error('Kein STT-Provider verfügbar');
         }
 
         try {
-            const validation = await AudioQualityValidator.validateAudioFile(audioPath);
-            
-            if (!validation.isValid) {
-                const proceed = await vscode.window.showWarningMessage(
-                    `Audio-Validierung:\n${validation.errors.join('\n')}\n\nTrotzdem fortfahren?`,
-                    'Ja',
-                    'Nein'
-                );
-                
-                if (proceed !== 'Ja') {
-                    return;
-                }
-            }
-
-            if (validation.warnings.length > 0) {
-                ErrorHandler.log('VoiceHandler', `Audio-Warnungen: ${validation.warnings.join(', ')}`);
-            }
-
+            // Zeige Progress - und warte darauf
             const text = await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: 'Transkribiere Aufnahme...',
@@ -166,6 +175,7 @@ export class IntegratedVoiceHandler {
                 
                 const startTime = Date.now();
                 
+                // FIX: Nutze Retry-Mechanismus
                 const transcribedText = await ErrorHandler.retry(
                     () => this.sttProvider!.transcribe(audioPath, language),
                     {
@@ -176,23 +186,24 @@ export class IntegratedVoiceHandler {
                 );
                 
                 const duration = Date.now() - startTime;
-                const durationSeconds = validation.duration ? validation.duration / 1000 : 0;
 
                 ErrorHandler.log('VoiceHandler', `Transkription erfolgreich in ${duration}ms`, 'success');
                 ErrorHandler.log('VoiceHandler', `Text: "${transcribedText}"`);
 
-                const provider = this.sttProvider!.name.includes('OpenAI') ? 'openai' : 'azure';
-                await ApiUsageTracker.trackTranscription(provider, durationSeconds, true);
-
                 return transcribedText;
             });
 
+            // FIX: Warte bis Progress Dialog geschlossen ist
+            // Nutze kleineren Delay aber mit Promise
             await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Verarbeite das Ergebnis
             await this.processTranscribedText(text);
 
         } catch (error: any) {
             ErrorHandler.handleError('transcribeAndProcess', error);
             
+            // Biete Fallback an
             const retry = await vscode.window.showErrorMessage(
                 `Transkription fehlgeschlagen: ${error.message}`,
                 'Erneut versuchen',
@@ -215,6 +226,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Verarbeitet transkribierten Text
+     */
     private async processTranscribedText(text: string): Promise<void> {
         if (!text || text.trim().length === 0) {
             vscode.window.showWarningMessage('Keine Sprache erkannt.');
@@ -223,6 +237,7 @@ export class IntegratedVoiceHandler {
 
         ErrorHandler.log('VoiceHandler', `Erkannter Text: "${text}"`);
 
+        // Zeige Optionen als NICHT-MODAL Dialog (besser für UX)
         const action = await vscode.window.showInformationMessage(
             `🎙️ Erkannter Text:\n\n"${text}"\n\nWas möchtest du tun?`,
             { modal: false },
@@ -249,6 +264,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Verarbeitet Voice Input (öffentliche Methode)
+     */
     public async processVoiceInput(text: string): Promise<string> {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -265,6 +283,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Fügt Kommentar ein
+     */
     private async insertComment(text: string): Promise<void> {
         const editor = vscode.window.activeTextEditor;
         if (!editor) return;
@@ -279,6 +300,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Verbessert mit KI und fügt ein
+     */
     private async enhanceAndInsertComment(text: string): Promise<void> {
         const editor = vscode.window.activeTextEditor;
         if (!editor) return;
@@ -286,6 +310,7 @@ export class IntegratedVoiceHandler {
         try {
             const codeContext = this.getCodeContext(editor);
             
+            // Nutze Retry-Mechanismus für API Call
             const enhancedText = await ErrorHandler.retry(
                 () => this.generator.enhanceWithOpenAI(text, codeContext),
                 {
@@ -306,6 +331,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Bearbeiten und einfügen
+     */
     private async editAndInsertComment(text: string): Promise<void> {
         const editedText = await vscode.window.showInputBox({
             prompt: 'Kommentar bearbeiten',
@@ -320,6 +348,9 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * Fügt Kommentar an Position ein
+     */
     private async insertCommentAtPosition(editor: vscode.TextEditor, comment: string): Promise<void> {
         const position = editor.selection.active;
         const line = editor.document.lineAt(position.line);
@@ -334,6 +365,9 @@ export class IntegratedVoiceHandler {
         });
     }
 
+    /**
+     * Holt Code-Kontext
+     */
     private getCodeContext(editor: vscode.TextEditor): string {
         const position = editor.selection.active;
         const startLine = Math.max(0, position.line - 5);
@@ -347,11 +381,17 @@ export class IntegratedVoiceHandler {
         return lines.join('\n');
     }
 
+    /**
+     * Lädt STT Provider neu (nach Config-Änderung)
+     */
     public async reloadSTTProvider(): Promise<void> {
         ErrorHandler.log('VoiceHandler', 'Lade STT Provider neu...');
         await this.initializeSTTProvider();
     }
 
+    /**
+     * Cleanup
+     */
     public dispose(): void {
         if (this.recordingTimer) {
             clearTimeout(this.recordingTimer);

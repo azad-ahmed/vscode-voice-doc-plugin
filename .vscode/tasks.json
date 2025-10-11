@@ -3,13 +3,50 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "compile",
-      "problemMatcher": "$tsc",
+      "script": "watch",
+      "problemMatcher": "$tsc-watch",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "never"
+      },
       "group": {
         "kind": "build",
         "isDefault": true
       },
+      "label": "npm: watch"
+    },
+    {
+      "type": "npm",
+      "script": "compile",
+      "problemMatcher": "$tsc",
+      "presentation": {
+        "reveal": "silent"
+      },
+      "group": "build",
       "label": "npm: compile"
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "problemMatcher": "$tsc",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "label": "npm: test"
+    },
+    {
+      "type": "npm",
+      "script": "lint",
+      "problemMatcher": "$eslint-stylish",
+      "presentation": {
+        "reveal": "silent"
+      },
+      "label": "npm: lint"
     }
   ]
 }

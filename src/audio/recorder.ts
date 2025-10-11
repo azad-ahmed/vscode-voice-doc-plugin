@@ -1,495 +1,355 @@
-import * as vscode from "vscode";
-import * as fs from "fs";
-import * as path from "path";
-import { spawn, ChildProcess } from "child_process";
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { spawn, ChildProcess } from 'child_process';
+import { FileSystemHelper } from '../utils/fileSystemHelper';
+import { ErrorHandler } from '../utils/errorHandler';
 
 export class AudioRecorder {
-  private isRecording: boolean = false;
-  private recordingProcess: ChildProcess | null = null;
-  private audioFilePath: string = "";
-  private outputChannel: vscode.OutputChannel;
-  private tempDir: string;
+    private isRecording: boolean = false;
+    private recordingProcess: ChildProcess | null = null;
+    private audioFilePath: string = '';
+    private tempDir: string;
 
-  constructor() {
-    this.outputChannel = vscode.window.createOutputChannel("Voice Doc Audio");
-    this.tempDir = path.join(__dirname, "..", "..", "temp");
-    this.ensureTempDirectory();
-  }
-
-  private ensureTempDirectory(): void {
-    if (!fs.existsSync(this.tempDir)) {
-      fs.mkdirSync(this.tempDir, { recursive: true });
-    }
-  }
-
-  async start(): Promise<void> {
-    if (this.isRecording) {
-      throw new Error("Recording is already in progress");
+    constructor() {
+        this.tempDir = path.join(__dirname, '..', '..', 'temp');
+        FileSystemHelper.ensureDirectoryExists(this.tempDir);
     }
 
-    const timestamp = Date.now();
-    this.audioFilePath = path.join(this.tempDir, `recording_${timestamp}.wav`);
-
-    this.outputChannel.appendLine(
-      `Starting audio recording to: ${this.audioFilePath}`
-    );
-
-    try {
-      await this.startPlatformSpecificRecording();
-      this.isRecording = true;
-      this.outputChannel.appendLine("Audio recording started successfully");
-    } catch (error: any) {
-      this.outputChannel.appendLine(
-        `Failed to start recording: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  private async startPlatformSpecificRecording(): Promise<void> {
-    const platform = process.platform;
-
-    switch (platform) {
-      case "win32":
-        await this.startWindowsRecording();
-        break;
-      case "darwin":
-        await this.startMacRecording();
-        break;
-      case "linux":
-        await this.startLinuxRecording();
-        break;
-      default:
-        throw new Error(`Unsupported platform: ${platform}`);
-    }
-  }
-
-  private async startWindowsRecording(): Promise<void> {
-    // Try different Windows recording methods
-    const methods = [
-      () => this.tryNAudioRecording(),
-      () => this.tryFFmpegRecording(),
-      () => this.tryWindowsBuiltinRecording(),
-      () => this.createDummyRecording(),
-    ];
-
-    let lastError: Error | null = null;
-
-    for (const method of methods) {
-      try {
-        await method();
-        return; // Success
-      } catch (error: any) {
-        lastError = error;
-        continue; // Try next method
-      }
-    }
-
-    throw new Error(
-      `All Windows recording methods failed. Last error: ${lastError?.message}`
-    );
-  }
-
-  private async tryNAudioRecording(): Promise<void> {
-    // Using PowerShell with Windows Sound Recorder API
-    const psScript = `
-Add-Type @"
-using System;
-using System.IO;
-using System.Runtime.InteropServices;
-public class AudioRecorder {
-    [DllImport("winmm.dll", SetLastError = true)]
-    public static extern uint waveInOpen(ref IntPtr phwi, uint uDeviceID, ref WAVEFORMATEX lpFormat, IntPtr dwCallback, IntPtr dwInstance, uint dwFlags);
-    
-    public struct WAVEFORMATEX {
-        public ushort wFormatTag;
-        public ushort nChannels;
-        public uint nSamplesPerSec;
-        public uint nAvgBytesPerSec;
-        public ushort nBlockAlign;
-        public ushort wBitsPerSample;
-        public ushort cbSize;
-    }
-}
-"@
-
-# Simplified: Use built-in Windows Voice Recorder via COM
-\$source = @"
-using System;
-using System.Runtime.InteropServices;
-using System.Threading;
-
-public class SimpleRecorder {
-    public static void StartRecording(string outputPath, int durationMs) {
-        // This is a placeholder - real implementation would use NAudio or similar
-        Console.WriteLine("Recording audio for " + durationMs + "ms to " + outputPath);
-        Thread.Sleep(durationMs);
-        Console.WriteLine("Recording complete");
-    }
-}
-"@
-
-Add-Type -TypeDefinition \$source
-[SimpleRecorder]::StartRecording("${this.audioFilePath}", 60000)
-`;
-
-    this.outputChannel.appendLine(
-      "Windows recording: Creating placeholder audio file"
-    );
-
-    const wavHeader = this.createWavHeader(16000, 1, 16);
-    fs.writeFileSync(this.audioFilePath, wavHeader);
-
-    vscode.window.showInformationMessage(
-      "⚠️ Audio-Aufnahme ist simuliert. Für echte Aufnahme installiere bitte sox: https://sox.sourceforge.net/"
-    );
-  }
-
-  private async tryFFmpegRecording(): Promise<void> {
-    // Try FFmpeg if available
-    this.recordingProcess = spawn("ffmpeg", [
-      "-f",
-      "dshow",
-      "-i",
-      'audio="Microphone"',
-      "-acodec",
-      "pcm_s16le",
-      "-ar",
-      "16000",
-      "-ac",
-      "1",
-      this.audioFilePath,
-    ]);
-
-    return this.waitForProcessStart();
-  }
-
-  private async tryWindowsBuiltinRecording(): Promise<void> {
-    // Fallback: Create a simple batch file approach
-    const batchContent = `
-@echo off
-echo Starting audio recording simulation...
-timeout /t 1 /nobreak >nul
-echo Recording process would start here
-`;
-
-    const batchFile = path.join(this.tempDir, "record.bat");
-    fs.writeFileSync(batchFile, batchContent);
-
-    this.recordingProcess = spawn("cmd", ["/c", batchFile]);
-
-    // Create a minimal WAV file
-    const wavHeader = this.createWavHeader(16000, 1, 16);
-    fs.writeFileSync(this.audioFilePath, wavHeader);
-
-    vscode.window.showWarningMessage(
-      "Audio recording is simulated on Windows. Install FFmpeg for real recording: https://ffmpeg.org/download.html"
-    );
-  }
-
-  private async startMacRecording(): Promise<void> {
-    const methods = [
-      () => this.tryMacBuiltinRecording(),
-      () => this.tryFFmpegRecording(),
-      () => this.createDummyRecording(),
-    ];
-
-    for (const method of methods) {
-      try {
-        await method();
-        return;
-      } catch (error) {
-        continue;
-      }
-    }
-
-    throw new Error("All macOS recording methods failed");
-  }
-
-  private async tryMacBuiltinRecording(): Promise<void> {
-    this.recordingProcess = spawn("rec", [
-      this.audioFilePath,
-      "rate",
-      "16000",
-      "channels",
-      "1",
-      "bits",
-      "16",
-    ]);
-
-    return this.waitForProcessStart();
-  }
-
-  private async startLinuxRecording(): Promise<void> {
-    const methods = [
-      () => this.tryAlsaRecording(),
-      () => this.tryPulseAudioRecording(),
-      () => this.tryFFmpegRecording(),
-      () => this.createDummyRecording(),
-    ];
-
-    for (const method of methods) {
-      try {
-        await method();
-        return;
-      } catch (error) {
-        continue;
-      }
-    }
-
-    throw new Error("All Linux recording methods failed");
-  }
-
-  private async tryAlsaRecording(): Promise<void> {
-    this.recordingProcess = spawn("arecord", [
-      "-f",
-      "S16_LE",
-      "-r",
-      "16000",
-      "-c",
-      "1",
-      this.audioFilePath,
-    ]);
-
-    return this.waitForProcessStart();
-  }
-
-  private async tryPulseAudioRecording(): Promise<void> {
-    this.recordingProcess = spawn("parecord", [
-      "--format=s16le",
-      "--rate=16000",
-      "--channels=1",
-      this.audioFilePath,
-    ]);
-
-    return this.waitForProcessStart();
-  }
-
-  private async waitForProcessStart(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.recordingProcess) {
-        reject(new Error("Recording process not started"));
-        return;
-      }
-
-      let hasError = false;
-
-      this.recordingProcess.on("error", (error) => {
-        hasError = true;
-        reject(error);
-      });
-
-      this.recordingProcess.on("spawn", () => {
-        if (!hasError) {
-          resolve();
+    async start(): Promise<void> {
+        if (this.isRecording) {
+            throw new Error('Aufnahme läuft bereits');
         }
-      });
 
-      // Timeout after 3 seconds
-      setTimeout(() => {
-        if (
-          !hasError &&
-          this.recordingProcess &&
-          !this.recordingProcess.killed
-        ) {
-          resolve();
-        } else if (!hasError) {
-          reject(new Error("Recording process failed to start"));
+        const timestamp = Date.now();
+        this.audioFilePath = path.join(this.tempDir, `recording_${timestamp}.wav`);
+
+        ErrorHandler.log('AudioRecorder', `Starte Aufnahme: ${this.audioFilePath}`);
+
+        try {
+            await this.startPlatformSpecificRecording();
+            this.isRecording = true;
+            ErrorHandler.log('AudioRecorder', 'Aufnahme gestartet', 'success');
+        } catch (error: any) {
+            ErrorHandler.handleError('AudioRecorder', error);
+            throw error;
         }
-      }, 3000);
-    });
-  }
-
-  private async createDummyRecording(): Promise<void> {
-    this.outputChannel.appendLine("Creating dummy audio file for testing");
-
-    // Create a valid but minimal WAV file
-    const wavHeader = this.createWavHeader(16000, 1, 16);
-    const silenceData = Buffer.alloc(16000 * 0.1 * 2); // 0.1 seconds of silence
-    const fullWav = Buffer.concat([wavHeader, silenceData]);
-
-    fs.writeFileSync(this.audioFilePath, fullWav);
-
-    vscode.window.showWarningMessage(
-      "Using dummy audio recording for testing. Install appropriate recording software for real functionality."
-    );
-  }
-
-  async stop(): Promise<string> {
-    if (!this.isRecording) {
-      throw new Error("No recording in progress");
     }
 
-    this.isRecording = false;
+    private async startPlatformSpecificRecording(): Promise<void> {
+        const platform = process.platform;
 
-    if (this.recordingProcess && !this.recordingProcess.killed) {
-      try {
-        // Try graceful shutdown first
-        this.recordingProcess.kill("SIGTERM");
+        switch (platform) {
+            case 'win32':
+                await this.startWindowsRecording();
+                break;
+            case 'darwin':
+                await this.startMacRecording();
+                break;
+            case 'linux':
+                await this.startLinuxRecording();
+                break;
+            default:
+                throw new Error(`Platform nicht unterstützt: ${platform}`);
+        }
+    }
 
-        // Wait a bit, then force kill if needed
-        setTimeout(() => {
-          if (this.recordingProcess && !this.recordingProcess.killed) {
-            this.recordingProcess.kill("SIGKILL");
-          }
-        }, 2000);
-      } catch (error) {
-        this.outputChannel.appendLine(
-          `Error stopping recording process: ${error}`
+    private async startWindowsRecording(): Promise<void> {
+        const methods = [
+            { name: 'FFmpeg', fn: () => this.tryFFmpegRecording() },
+            { name: 'SoX', fn: () => this.trySoxRecording() }
+        ];
+
+        let lastError: Error | null = null;
+
+        for (const method of methods) {
+            try {
+                ErrorHandler.log('AudioRecorder', `Versuche ${method.name}...`);
+                await method.fn();
+                return;
+            } catch (error: any) {
+                lastError = error;
+                ErrorHandler.log('AudioRecorder', `${method.name} nicht verfügbar`);
+                continue;
+            }
+        }
+
+        const userConfirmed = await this.showRecordingUnavailableDialog();
+        
+        if (!userConfirmed) {
+            throw new Error('Benutzer hat Demo-Aufnahme abgelehnt');
+        }
+
+        await this.createSimulatedRecording();
+    }
+
+    private async showRecordingUnavailableDialog(): Promise<boolean> {
+        const action = await vscode.window.showWarningMessage(
+            '⚠️ Keine Audio-Aufnahme-Software gefunden\n\n' +
+            'Für echte Aufnahmen installieren Sie bitte:\n' +
+            '• FFmpeg: https://ffmpeg.org/download.html\n' +
+            '• oder SoX: http://sox.sourceforge.net/\n\n' +
+            'Möchten Sie im Demo-Modus fortfahren?',
+            { modal: true },
+            'Demo-Modus verwenden',
+            'Installation-Anleitung',
+            'Abbrechen'
         );
-      }
 
-      this.recordingProcess = null;
-    }
-
-    // Special handling for Windows PowerShell recording
-    if (process.platform === "win32") {
-      await this.stopWindowsRecording();
-    }
-
-    // Ensure file exists
-    if (!fs.existsSync(this.audioFilePath)) {
-      const wavHeader = this.createWavHeader(16000, 1, 16);
-      fs.writeFileSync(this.audioFilePath, wavHeader);
-    }
-
-    this.outputChannel.appendLine(`Recording stopped: ${this.audioFilePath}`);
-    return this.audioFilePath;
-  }
-
-  private async stopWindowsRecording(): Promise<void> {
-    try {
-      const psScript = `
-$command = "stop recsound"
-[WinMM]::mciSendString($command, $null, 0, [System.IntPtr]::Zero)
-
-$command = "save recsound ${this.audioFilePath.replace(/\\/g, "\\\\")}"
-[WinMM]::mciSendString($command, $null, 0, [System.IntPtr]::Zero)
-
-$command = "close recsound"
-[WinMM]::mciSendString($command, $null, 0, [System.IntPtr]::Zero)
-`;
-
-      const stopProcess = spawn("powershell", [
-        "-NoProfile",
-        "-Command",
-        psScript,
-      ]);
-
-      await new Promise<void>((resolve) => {
-        stopProcess.on("close", () => resolve());
-        setTimeout(resolve, 2000); // Timeout
-      });
-    } catch (error) {
-      this.outputChannel.appendLine(
-        `Error in Windows recording cleanup: ${error}`
-      );
-    }
-  }
-
-  private createWavHeader(
-    sampleRate: number,
-    channels: number,
-    bitsPerSample: number
-  ): Buffer {
-    const bytesPerSample = bitsPerSample / 8;
-    const blockAlign = channels * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-
-    // Minimal data size for a valid WAV
-    const dataSize = sampleRate * channels * bytesPerSample * 0.1; // 0.1 seconds
-    const fileSize = 44 + dataSize;
-
-    const buffer = Buffer.alloc(44);
-
-    // RIFF Header
-    buffer.write("RIFF", 0);
-    buffer.writeUInt32LE(fileSize - 8, 4);
-    buffer.write("WAVE", 8);
-
-    // fmt chunk
-    buffer.write("fmt ", 12);
-    buffer.writeUInt32LE(16, 16); // chunk size
-    buffer.writeUInt16LE(1, 20); // PCM format
-    buffer.writeUInt16LE(channels, 22);
-    buffer.writeUInt32LE(sampleRate, 24);
-    buffer.writeUInt32LE(byteRate, 28);
-    buffer.writeUInt16LE(blockAlign, 32);
-    buffer.writeUInt16LE(bitsPerSample, 34);
-
-    // data chunk
-    buffer.write("data", 36);
-    buffer.writeUInt32LE(dataSize, 40);
-
-    return buffer;
-  }
-
-  async forceStop(): Promise<void> {
-    if (this.recordingProcess) {
-      try {
-        this.recordingProcess.kill("SIGKILL");
-      } catch (error) {
-        // Ignore errors in force stop
-      }
-      this.recordingProcess = null;
-    }
-    this.isRecording = false;
-  }
-
-  cleanup(): void {
-    try {
-      // Clean up temporary files older than 1 hour
-      const files = fs.readdirSync(this.tempDir);
-      const oneHourAgo = Date.now() - 60 * 60 * 1000;
-
-      for (const file of files) {
-        const filePath = path.join(this.tempDir, file);
-        const stats = fs.statSync(filePath);
-
-        if (
-          stats.mtime.getTime() < oneHourAgo &&
-          (file.endsWith(".wav") ||
-            file.endsWith(".mp3") ||
-            file.endsWith(".bat"))
-        ) {
-          fs.unlinkSync(filePath);
-          this.outputChannel.appendLine(`Cleaned up: ${file}`);
+        if (action === 'Installation-Anleitung') {
+            vscode.env.openExternal(vscode.Uri.parse('https://ffmpeg.org/download.html'));
+            return false;
         }
-      }
-    } catch (error) {
-      this.outputChannel.appendLine(`Cleanup error: ${error}`);
+
+        return action === 'Demo-Modus verwenden';
     }
-  }
 
-  getLastRecordingPath(): string {
-    return this.audioFilePath;
-  }
+    private async createSimulatedRecording(): Promise<void> {
+        ErrorHandler.log('AudioRecorder', '⚠️ Erstelle simulierte Aufnahme');
 
-  isCurrentlyRecording(): boolean {
-    return this.isRecording;
-  }
-}
+        const wavHeader = this.createWavHeader(16000, 1, 16);
+        const silenceData = Buffer.alloc(16000 * 1 * 2);
+        const fullWav = Buffer.concat([wavHeader, silenceData]);
 
-// Static methods for backwards compatibility
-export class AudioRecorderStatic {
-  private static instance: AudioRecorder;
+        await FileSystemHelper.writeFileAsync(this.audioFilePath, fullWav);
 
-  static getInstance(): AudioRecorder {
-    if (!AudioRecorderStatic.instance) {
-      AudioRecorderStatic.instance = new AudioRecorder();
+        vscode.window.showWarningMessage(
+            '⚠️ Demo-Modus: Simulierte Aufnahme wird verwendet'
+        );
     }
-    return AudioRecorderStatic.instance;
-  }
 
-  static async start(): Promise<void> {
-    return AudioRecorderStatic.getInstance().start();
-  }
+    private async tryFFmpegRecording(): Promise<void> {
+        this.recordingProcess = spawn('ffmpeg', [
+            '-f', 'dshow',
+            '-i', 'audio="Microphone"',
+            '-acodec', 'pcm_s16le',
+            '-ar', '16000',
+            '-ac', '1',
+            this.audioFilePath
+        ]);
 
-  static async stop(): Promise<string> {
-    return AudioRecorderStatic.getInstance().stop();
-  }
+        return this.waitForProcessStart('FFmpeg');
+    }
 
-  static async forceStop(): Promise<void> {
-    return AudioRecorderStatic.getInstance().forceStop();
-  }
+    private async trySoxRecording(): Promise<void> {
+        this.recordingProcess = spawn('sox', [
+            '-d',
+            '-r', '16000',
+            '-c', '1',
+            '-b', '16',
+            this.audioFilePath
+        ]);
+
+        return this.waitForProcessStart('SoX');
+    }
+
+    private async startMacRecording(): Promise<void> {
+        const methods = [
+            { name: 'rec (SoX)', fn: () => this.tryMacBuiltinRecording() },
+            { name: 'FFmpeg', fn: () => this.tryFFmpegRecording() }
+        ];
+
+        let lastError: Error | null = null;
+
+        for (const method of methods) {
+            try {
+                ErrorHandler.log('AudioRecorder', `Versuche ${method.name}...`);
+                await method.fn();
+                return;
+            } catch (error: any) {
+                lastError = error;
+                continue;
+            }
+        }
+
+        throw new Error('Keine Audio-Aufnahme-Software für macOS gefunden');
+    }
+
+    private async tryMacBuiltinRecording(): Promise<void> {
+        this.recordingProcess = spawn('rec', [
+            this.audioFilePath,
+            'rate', '16000',
+            'channels', '1',
+            'bits', '16'
+        ]);
+
+        return this.waitForProcessStart('rec');
+    }
+
+    private async startLinuxRecording(): Promise<void> {
+        const methods = [
+            { name: 'arecord (ALSA)', fn: () => this.tryAlsaRecording() },
+            { name: 'parecord (PulseAudio)', fn: () => this.tryPulseAudioRecording() },
+            { name: 'FFmpeg', fn: () => this.tryFFmpegRecording() }
+        ];
+
+        let lastError: Error | null = null;
+
+        for (const method of methods) {
+            try {
+                ErrorHandler.log('AudioRecorder', `Versuche ${method.name}...`);
+                await method.fn();
+                return;
+            } catch (error: any) {
+                lastError = error;
+                continue;
+            }
+        }
+
+        throw new Error('Keine Audio-Aufnahme-Software für Linux gefunden');
+    }
+
+    private async tryAlsaRecording(): Promise<void> {
+        this.recordingProcess = spawn('arecord', [
+            '-f', 'S16_LE',
+            '-r', '16000',
+            '-c', '1',
+            this.audioFilePath
+        ]);
+
+        return this.waitForProcessStart('arecord');
+    }
+
+    private async tryPulseAudioRecording(): Promise<void> {
+        this.recordingProcess = spawn('parecord', [
+            '--format=s16le',
+            '--rate=16000',
+            '--channels=1',
+            this.audioFilePath
+        ]);
+
+        return this.waitForProcessStart('parecord');
+    }
+
+    private async waitForProcessStart(processName: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.recordingProcess) {
+                reject(new Error('Recording-Prozess nicht gestartet'));
+                return;
+            }
+
+            let hasError = false;
+
+            this.recordingProcess.on('error', (error) => {
+                hasError = true;
+                reject(new Error(`${processName} nicht verfügbar: ${error.message}`));
+            });
+
+            this.recordingProcess.on('spawn', () => {
+                if (!hasError) {
+                    resolve();
+                }
+            });
+
+            setTimeout(() => {
+                if (!hasError && this.recordingProcess && !this.recordingProcess.killed) {
+                    resolve();
+                } else if (!hasError) {
+                    reject(new Error(`${processName} konnte nicht gestartet werden`));
+                }
+            }, 3000);
+        });
+    }
+
+    async stop(): Promise<string> {
+        if (!this.isRecording) {
+            throw new Error('Keine aktive Aufnahme');
+        }
+
+        this.isRecording = false;
+
+        if (this.recordingProcess && !this.recordingProcess.killed) {
+            try {
+                this.recordingProcess.kill('SIGTERM');
+
+                setTimeout(() => {
+                    if (this.recordingProcess && !this.recordingProcess.killed) {
+                        this.recordingProcess.kill('SIGKILL');
+                    }
+                }, 2000);
+            } catch (error) {
+                ErrorHandler.log('AudioRecorder', `Fehler beim Stoppen: ${error}`);
+            }
+
+            this.recordingProcess = null;
+        }
+
+        if (!FileSystemHelper.fileExists(this.audioFilePath)) {
+            const wavHeader = this.createWavHeader(16000, 1, 16);
+            await FileSystemHelper.writeFileAsync(this.audioFilePath, wavHeader);
+        }
+
+        ErrorHandler.log('AudioRecorder', `Aufnahme gestoppt: ${this.audioFilePath}`, 'success');
+        return this.audioFilePath;
+    }
+
+    private createWavHeader(
+        sampleRate: number,
+        channels: number,
+        bitsPerSample: number
+    ): Buffer {
+        const bytesPerSample = bitsPerSample / 8;
+        const blockAlign = channels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = sampleRate * channels * bytesPerSample * 0.1;
+        const fileSize = 44 + dataSize;
+
+        const buffer = Buffer.alloc(44);
+
+        buffer.write('RIFF', 0);
+        buffer.writeUInt32LE(fileSize - 8, 4);
+        buffer.write('WAVE', 8);
+        buffer.write('fmt ', 12);
+        buffer.writeUInt32LE(16, 16);
+        buffer.writeUInt16LE(1, 20);
+        buffer.writeUInt16LE(channels, 22);
+        buffer.writeUInt32LE(sampleRate, 24);
+        buffer.writeUInt32LE(byteRate, 28);
+        buffer.writeUInt16LE(blockAlign, 32);
+        buffer.writeUInt16LE(bitsPerSample, 34);
+        buffer.write('data', 36);
+        buffer.writeUInt32LE(dataSize, 40);
+
+        return buffer;
+    }
+
+    async forceStop(): Promise<void> {
+        if (this.recordingProcess) {
+            try {
+                this.recordingProcess.kill('SIGKILL');
+            } catch (error) {
+                ErrorHandler.log('AudioRecorder', `Force stop Fehler: ${error}`);
+            }
+            this.recordingProcess = null;
+        }
+        this.isRecording = false;
+    }
+
+    async cleanup(): Promise<void> {
+        try {
+            const deletedCount = await FileSystemHelper.deleteOldFiles(
+                this.tempDir,
+                ['.wav', '.mp3', '.bat'],
+                60 * 60 * 1000
+            );
+
+            if (deletedCount > 0) {
+                ErrorHandler.log('AudioRecorder', `${deletedCount} alte Dateien gelöscht`);
+            }
+        } catch (error) {
+            ErrorHandler.log('AudioRecorder', `Cleanup Fehler: ${error}`);
+        }
+    }
+
+    getLastRecordingPath(): string {
+        return this.audioFilePath;
+    }
+
+    isCurrentlyRecording(): boolean {
+        return this.isRecording;
+    }
+
+    dispose(): void {
+        this.forceStop();
+        this.cleanup();
+    }
 }

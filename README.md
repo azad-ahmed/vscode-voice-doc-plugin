@@ -1,197 +1,192 @@
-# 🎤 VSCode Voice Documentation Plugin
+# 🎤 VS Code Voice Documentation Plugin
 
-**KI-gestützte Code-Dokumentation per Spracheingabe**
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/azad-ahmed/vscode-voice-doc-plugin)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Ein Visual Studio Code Plugin, das es ermöglicht, Code-Kommentare durch Spracheingabe zu erstellen. Sprechen Sie einfach Ihre Erklärungen und das Plugin konvertiert sie automatisch in gut formatierte Code-Kommentare.
+> KI-gestützte Code-Dokumentation per Spracheingabe - Diplomarbeit Projekt
 
-![Demo](https://via.placeholder.com/800x400?text=Voice+Doc+Demo+GIF)
+Ein innovatives VS Code Plugin, das Entwicklern ermöglicht, Code-Dokumentation durch Spracheingabe zu erstellen. Das Plugin nutzt moderne KI-Technologien (OpenAI Whisper, GPT-4, Azure Cognitive Services) für Speech-to-Text und intelligente Kommentargenerierung.
+
+## 📋 Inhaltsverzeichnis
+
+- [Features](#-features)
+- [Installation](#-installation)
+- [Erste Schritte](#-erste-schritte)
+- [Konfiguration](#-konfiguration)
+- [Verwendung](#-verwendung)
+- [Architektur](#-architektur)
+- [Entwicklung](#-entwicklung)
+- [Lizenz](#-lizenz)
 
 ## ✨ Features
 
-- 🎤 **Audio-Aufnahme** mit einem Tastendruck (Ctrl+Alt+R)
-- 🤖 **Multiple STT-Provider** (Azure, OpenAI Whisper, Google)
-- 🌍 **Mehrsprachig** (Deutsch, Englisch, Französisch, Spanisch, etc.)
-- 💬 **Intelligente Kommentargenerierung** mit automatischer Formatierung
-- 📝 **Sprachspezifische Kommentare** für verschiedene Programmiersprachen
-- 🔒 **Sichere API-Key-Speicherung** über VS Code Secrets API
-- ⚡ **Sofortige Integration** direkt in den Editor
-- 🎯 **Kontextbezogene Kommentare** basierend auf Code-Kontext
+### 🎙️ Voice-to-Comment
+- **Sprachaufnahme**: Drücken Sie `Ctrl+Shift+R` (Mac: `Cmd+Shift+R`) um die Aufnahme zu starten/stoppen
+- **Multi-Provider Support**: OpenAI Whisper oder Azure Speech Services
+- **Automatische Transkription**: Sprache wird in Text umgewandelt
+- **KI-Verbesserung**: GPT-4 optimiert die Dokumentation (optional)
+
+### 🤖 Auto-Modus
+- **Automatische Code-Analyse**: Erkennt undokumentierte Funktionen und Klassen
+- **Intelligente Vorschläge**: KI generiert passende Kommentare basierend auf Code-Kontext
+- **Lern-System**: Plugin lernt aus Ihrem Feedback und passt sich an
+
+### 📊 Code-Analyse
+- **Komplexitäts-Messung**: Bewertet Code-Komplexität (McCabe)
+- **Pattern-Erkennung**: Identifiziert Code-Patterns aus vergangenen Dokumentationen
+- **Multi-Language Support**: TypeScript, JavaScript, Python
+
+### 🎨 Flexible Kommentar-Stile
+- JSDoc (Standard)
+- Inline-Kommentare
+- Block-Kommentare
 
 ## 🚀 Installation
 
-### Option 1: VS Code Marketplace (empfohlen)
+### Voraussetzungen
+- Visual Studio Code 1.70.0 oder höher
+- Node.js 16.x oder höher
+- OpenAI API Key oder Azure Cognitive Services Key
+
+### Aus Source installieren
+
 ```bash
-ext install azad-ahmed.vscode-voice-doc
+# Repository klonen
+git clone https://github.com/azad-ahmed/vscode-voice-doc-plugin.git
+cd vscode-voice-doc-plugin
+
+# Abhängigkeiten installieren
+npm install
+
+# Projekt kompilieren
+npm run compile
+
+# Extension in VS Code laden
+# Drücke F5 um Extension Development Host zu starten
 ```
 
-### Option 2: Manuell aus Repository
-1. Repository klonen:
-   ```bash
-   git clone https://github.com/azad-ahmed/vscode-voice-doc-plugin.git
-   ```
+## 🎯 Erste Schritte
 
-2. Dependencies installieren:
-   ```bash
-   cd vscode-voice-doc-plugin
-   npm install
-   ```
+### 1. API Keys konfigurieren
 
-3. Extension kompilieren:
-   ```bash
-   npm run compile
-   ```
-
-4. Extension in VS Code laden:
-   - F5 drücken (startet Extension Development Host)
-   - Oder VSIX-Paket erstellen: `npm run package`
-
-## ⚙️ Setup & Konfiguration
-
-### 1. STT-Provider wählen
-
-Das Plugin unterstützt mehrere Speech-to-Text-Anbieter:
-
-#### Azure Cognitive Services (Empfohlen)
-```bash
-# 1. API Key erhalten von: https://portal.azure.com
-# 2. In VS Code: Ctrl+Alt+C -> Provider: Azure -> API Key eingeben
+**Option A: OpenAI (Empfohlen)**
+```
+Ctrl+Shift+P → "Voice Doc: OpenAI API Key konfigurieren"
 ```
 
-#### OpenAI Whisper (Lokal & Kostenlos)
-```bash
-# Installation:
-pip install openai-whisper
-
-# Automatische Erkennung durch Plugin
+**Option B: Azure Cognitive Services**
+```
+Ctrl+Shift+P → "Voice Doc: Azure konfigurieren"
 ```
 
-#### Google Cloud Speech-to-Text
-```bash
-# 1. Google Cloud Projekt erstellen
-# 2. Speech-to-Text API aktivieren
-# 3. API Key generieren und in Plugin konfigurieren
+### 2. Erste Sprachaufnahme
+
+1. Öffnen Sie eine Code-Datei
+2. Positionieren Sie den Cursor über einer Funktion/Klasse
+3. Drücken Sie `Ctrl+Shift+R`
+4. Sprechen Sie Ihre Dokumentation
+5. Drücken Sie erneut `Ctrl+Shift+R` zum Stoppen
+6. Der Kommentar wird automatisch eingefügt
+
+### 3. Auto-Modus aktivieren
+
+```
+Ctrl+Shift+P → "Voice Doc: Auto-Modus umschalten"
 ```
 
-### 2. Sprache konfigurieren
+## ⚙️ Konfiguration
 
+Öffnen Sie die VS Code Einstellungen (`Ctrl+,`) und suchen Sie nach "Voice Doc":
+
+| Einstellung | Beschreibung | Standard |
+|------------|-------------|----------|
+| `voiceDocPlugin.sttProvider` | Speech-to-Text Provider | `auto` |
+| `voiceDocPlugin.language` | Sprache für Erkennung | `de-DE` |
+| `voiceDocPlugin.autoMode` | Auto-Analyse aktivieren | `false` |
+| `voiceDocPlugin.minConfidence` | Min. Konfidenz für Vorschläge | `0.7` |
+| `voiceDocPlugin.learningEnabled` | Lern-System aktivieren | `true` |
+| `voiceDocPlugin.commentStyle` | Kommentar-Stil | `JSDoc` |
+
+Beispiel `settings.json`:
 ```json
-// settings.json
 {
-    "voiceDoc.language": "de-DE",        // Deutsch (Standard)
-    "voiceDoc.speechService": "azure",   // STT-Anbieter
-    "voiceDoc.autoInsert": true,         // Automatisches Einfügen
-    "voiceDoc.commentStyle": "auto"      // Kommentar-Stil
+  "voiceDocPlugin.sttProvider": "openai",
+  "voiceDocPlugin.language": "de-DE",
+  "voiceDocPlugin.autoMode": true,
+  "voiceDocPlugin.commentStyle": "JSDoc"
 }
 ```
-
-### 3. Tastenkürzel (optional anpassen)
-
-| Aktion | Standard | Beschreibung |
-|--------|----------|-------------|
-| Aufnahme starten/stoppen | `Ctrl+Alt+R` | Sprach-Aufnahme |
-| Text zu Kommentar | `Ctrl+Alt+T` | Direkteingabe |
-| Konfiguration | `Ctrl+Alt+C` | Settings öffnen |
 
 ## 📖 Verwendung
 
-### Basis-Workflow
-
-1. **Cursor positionieren** wo der Kommentar eingefügt werden soll
-2. **Aufnahme starten**: `Ctrl+Alt+R` drücken
-3. **Sprechen**: Erklärung deutlich aussprechen
-4. **Aufnahme beenden**: `Ctrl+Alt+R` erneut drücken
-5. **Automatische Verarbeitung**: Plugin transkribiert und formatiert
-6. **Kommentar wird eingefügt** an Cursor-Position
-
-### Beispiel
-
-**Sie sprechen:**
-> "Diese Funktion berechnet den Steuerbetrag basierend auf dem Einkommen und gibt das Ergebnis als Dezimalzahl zurück"
-
-**Plugin generiert:**
-```javascript
-/**
- * Berechnet den Steuerbetrag basierend auf dem Einkommen
- * und gibt das Ergebnis als Dezimalzahl zurück
- */
-function calculateTax(income) {
-    // ...
-}
-```
-
-### Erweiterte Features
-
-#### Kontextuelle Kommentare
-```javascript
-// Vor einer Funktion sprechen -> Funktionsdokumentation
-// Vor einer Variable sprechen -> Variable-Erklärung
-// Inline sprechen -> Inline-Kommentar
-```
-
-#### Verschiedene Sprachen
-```python
-# Python
-def calculate_tax(income):
-    """Berechnet die Steuer basierend auf dem Einkommen"""
-    pass
-
-// Java
-/**
- * Berechnet die Steuer basierend auf dem Einkommen
- */
-public double calculateTax(double income) {
-    // ...
-}
-
-/* CSS */
-.button {
-    /* Primärer Button-Stil für die Anwendung */
-    background-color: #007acc;
-}
-```
-
-#### Qualitäts-Validierung
-Das Plugin validiert automatisch die Qualität der generierten Kommentare und gibt Verbesserungsvorschläge.
-
-## 🔧 Konfiguration im Detail
-
-### Verfügbare Einstellungen
-
-```json
-{
-    // STT-Provider
-    "voiceDoc.speechService": "azure|whisper|google",
-    
-    // Sprach-Erkennung
-    "voiceDoc.language": "de-DE|en-US|fr-FR|es-ES|it-IT",
-    
-    // Azure-spezifisch
-    "voiceDoc.azure.region": "westeurope|eastus|westus2",
-    
-    // Kommentar-Formatierung
-    "voiceDoc.commentStyle": "auto|single-line|multi-line|doc-style",
-    "voiceDoc.maxCommentLength": 120,
-    
-    // Verhalten
-    "voiceDoc.autoInsert": true,
-    "voiceDoc.enableValidation": true,
-    "voiceDoc.showRecordingStatus": true
-}
-```
-
 ### Kommandos
 
-| Kommando | Beschreibung |
-|----------|-------------|
-| `Voice Doc: Start Recording` | Sprach-Aufnahme starten |
-| `Voice Doc: Stop Recording` | Aufnahme beenden |
-| `Voice Doc: Configure Settings` | Interaktive Konfiguration |
-| `Voice Doc: Insert from Text` | Text direkt eingeben |
-| `Voice Doc: Test STT Providers` | Provider-Verfügbarkeit testen |
+| Kommando | Tastenkombination | Beschreibung |
+|---------|------------------|--------------|
+| Toggle Recording | `Ctrl+Shift+R` | Aufnahme starten/stoppen |
+| Convert to Comment | `Ctrl+Shift+C` | Markierten Text in Kommentar umwandeln |
+| Toggle Auto Mode | `Ctrl+Shift+A` | Auto-Modus ein/aus |
+| Analyze Function | - | Aktuelle Funktion analysieren |
+| Show Statistics | - | Lern-Statistiken anzeigen |
+
+### Beispiel-Workflow
+
+```typescript
+// 1. Schreiben Sie eine Funktion
+function calculateTotal(items: Item[], taxRate: number): number {
+    return items.reduce((sum, item) => sum + item.price, 0) * (1 + taxRate);
+}
+
+// 2. Cursor über Funktion positionieren, Ctrl+Shift+R drücken
+
+// 3. Sprechen: "Diese Funktion berechnet den Gesamtpreis inklusive Steuer"
+
+// 4. Ergebnis nach Enter:
+/**
+ * Berechnet den Gesamtpreis aller Items inklusive Steuern
+ * @param items - Array von Items mit Preisen
+ * @param taxRate - Steuersatz als Dezimalzahl (z.B. 0.19 für 19%)
+ * @returns Gesamtpreis inklusive Steuern
+ */
+function calculateTotal(items: Item[], taxRate: number): number {
+    return items.reduce((sum, item) => sum + item.price, 0) * (1 + taxRate);
+}
+```
+
+## 🏗️ Architektur
+
+```
+vscode-voice-doc-plugin/
+├── src/
+│   ├── extension.ts              # Extension Entry Point
+│   ├── generator.ts              # Kommentar-Generator
+│   ├── integratedVoiceHandler.ts # Voice Input Handler
+│   ├── analysis/
+│   │   ├── codeAnalyzer.ts       # Code-Analyse mit GPT-4
+│   │   └── autoCommentator.ts    # Automatische Kommentierung
+│   ├── audio/
+│   │   └── audioRecorder.ts      # Audio-Aufnahme
+│   ├── stt/
+│   │   ├── openAIProvider.ts     # OpenAI Whisper Integration
+│   │   ├── azureProvider.ts      # Azure STT Integration
+│   │   └── sttService.ts         # STT Service Manager
+│   ├── learning/
+│   │   └── learningSystem.ts     # ML-basiertes Lernsystem
+│   └── utils/
+│       ├── errorHandler.ts       # Fehlerbehandlung
+│       ├── configManager.ts      # Konfigurations-Manager
+│       └── apiUsageTracker.ts    # API-Nutzungs-Tracking
+├── test/                         # Unit & Integration Tests
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+Mehr Details in [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 🛠️ Entwicklung
 
-### Entwicklungsumgebung einrichten
+### Setup
 
 ```bash
 # Repository klonen
@@ -201,127 +196,73 @@ cd vscode-voice-doc-plugin
 # Dependencies installieren
 npm install
 
-# TypeScript kompilieren (Watch-Modus)
-npm run watch
+# Projekt kompilieren
+npm run compile
 
-# VS Code Extension Development Host starten
-code . 
-# Dann F5 drücken
+# Tests ausführen
+npm test
+
+# Linting
+npm run lint
 ```
 
-### Projekt-Struktur
+### Extension debuggen
 
-```
-src/
-├── extension.ts              # Haupt-Extension
-├── generator.ts              # Kommentar-Generator
-├── audioRecorder.ts          # Audio-Aufnahme (Legacy)
-├── audio/
-│   └── recorder.ts          # Neue Audio-Implementation
-└── stt/
-    ├── factory.ts           # STT-Provider-Factory
-    └── providers/
-        ├── azure.ts         # Azure Cognitive Services
-        ├── whisper.ts       # OpenAI Whisper
-        └── webSpeech.ts     # Web Speech API
-```
+1. Öffnen Sie das Projekt in VS Code
+2. Drücken Sie `F5` um Extension Development Host zu starten
+3. Breakpoints setzen und debuggen
 
 ### Neue Features hinzufügen
 
-1. **STT-Provider erweitern**:
-   ```typescript
-   // src/stt/providers/newProvider.ts
-   export class NewProvider implements STTProvider {
-       async transcribe(audioPath: string): Promise<string> {
-           // Implementation
-       }
-   }
-   ```
+Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Guidelines
 
-2. **Sprach-Support erweitern**:
-   ```typescript
-   // src/generator.ts - getCommentStyle()
-   'newlang': { single: '#', multi: { start: '"""', end: '"""' }}
-   ```
+## 📊 Projektinformationen
 
-### Tests ausführen
+**Diplomarbeit**: KI-gestützte Code-Dokumentation durch Spracheingabe  
+**Autor**: Azad Ahmed  
+**Institution**: [Ihre Institution]  
+**Betreuer**: [Name des Betreuers]  
+**Jahr**: 2024/2025
 
-```bash
-npm run test
-```
+### Projektziele
 
-## 🐛 Troubleshooting
+- ✅ **Z1**: Sprachaufnahme während des Programmierens
+- ✅ **Z2**: Automatische Speech-to-Text Transkription (>80% Genauigkeit)
+- ✅ **Z3**: KI-generierte strukturierte Dokumentation (>90% Verständlichkeit)
+- ✅ **Z4**: Nahtlose VS Code Integration
+- ✅ **Z5**: Intuitive Benutzeroberfläche (>70% Zufriedenheit)
 
-### Häufige Probleme
+## 🤝 Beitragen
 
-#### "No STT providers available"
-- Azure: API Key konfiguriert? Region korrekt?
-- Whisper: `pip install openai-whisper` ausgeführt?
-- Rechte: Mikrofon-Berechtigung erteilt?
+Contributions sind willkommen! Siehe [CONTRIBUTING.md](CONTRIBUTING.md)
 
-#### "Recording failed to start"
-- **Windows**: FFmpeg installieren oder PowerShell-Berechtigung prüfen
-- **macOS**: `rec` installieren: `brew install sox`
-- **Linux**: ALSA/PulseAudio konfigurieren
+1. Fork das Repository
+2. Erstelle einen Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
+4. Push zum Branch (`git push origin feature/AmazingFeature`)
+5. Öffne einen Pull Request
 
-#### "Transcription quality poor"
-- Mikrofonqualität verbessern
-- Hintergrundgeräusche reduzieren
-- Langsamer und deutlicher sprechen
-- Korrekte Sprache in Settings wählen
+## 📝 Changelog
 
-#### "Comments not inserting"
-- Cursor in aktivem Editor positioniert?
-- Schreibschutz der Datei prüfen
-- Extension-Log in Output-Panel prüfen
-
-### Debug-Modus aktivieren
-
-```json
-// settings.json
-{
-    "voiceDoc.debug": true
-}
-```
-
-Log-Output in: `View` → `Output` → `Voice Doc`
-
-## 🤝 Mitwirken
-
-Beiträge sind willkommen! Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Details.
-
-### Development Workflow
-
-1. Fork des Repositories
-2. Feature-Branch erstellen: `git checkout -b feature/amazing-feature`
-3. Änderungen committen: `git commit -m 'Add amazing feature'`
-4. Branch pushen: `git push origin feature/amazing-feature`
-5. Pull Request erstellen
-
-### Coding Standards
-
-- TypeScript mit strict mode
-- ESLint-Regeln befolgen
-- Tests für neue Features
-- Dokumentation aktualisieren
+Siehe [CHANGELOG.md](CHANGELOG.md) für alle Änderungen
 
 ## 📄 Lizenz
 
-Dieses Projekt steht unter der [MIT Lizenz](LICENSE).
+Dieses Projekt ist unter der MIT Lizenz lizenziert - siehe [LICENSE](LICENSE) für Details
 
-## 🙏 Danksagung
+## 🙏 Danksagungen
 
-- **OpenAI Whisper** für lokale STT-Funktionalität
-- **Microsoft Azure** für Cloud-basierte Spracherkennung
-- **VS Code Team** für die ausgezeichnete Extension API
-- **EDA (Eidgenössisches Departement für Auswärtige Angelegenheiten)** für die Projektinitiative
+- OpenAI für Whisper und GPT-4 API
+- Microsoft für Azure Cognitive Services
+- VS Code Extension API Team
+- Alle Betreuer und Tester des Projekts
 
-## 📞 Support
+## 📧 Kontakt
 
-- **Issues**: [GitHub Issues](https://github.com/azad-ahmed/vscode-voice-doc-plugin/issues)
-- **Diskussionen**: [GitHub Discussions](https://github.com/azad-ahmed/vscode-voice-doc-plugin/discussions)
-- **E-Mail**: azad.ahmed@example.com
+Azad Ahmed - [@azad-ahmed](https://github.com/azad-ahmed)
+
+Projekt Link: [https://github.com/azad-ahmed/vscode-voice-doc-plugin](https://github.com/azad-ahmed/vscode-voice-doc-plugin)
 
 ---
 
-**Made with ❤️ for developers who want to document their code effortlessly.**
+**Hinweis**: Dieses Plugin wurde im Rahmen einer Diplomarbeit entwickelt und befindet sich in aktiver Entwicklung.

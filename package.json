@@ -1,7 +1,7 @@
 {
   "name": "vscode-voice-doc-plugin",
   "displayName": "Voice Documentation Plugin",
-  "description": "KI-gestützte Code-Dokumentation per Spracheingabe",
+  "description": "KI-gestützte Code-Dokumentation per Spracheingabe - Diplomarbeit Projekt",
   "version": "1.0.0",
   "publisher": "azad-ahmed",
   "engines": {
@@ -17,7 +17,13 @@
     "comments",
     "speech",
     "ai",
-    "openai"
+    "openai",
+    "azure",
+    "whisper",
+    "speech-to-text",
+    "auto-mode",
+    "learning",
+    "code-analysis"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -56,9 +62,44 @@
         "icon": "$(key)"
       },
       {
-        "command": "voiceDocPlugin.test",
-        "title": "Voice Doc: Test-Funktionen",
+        "command": "voiceDocPlugin.configureAzure",
+        "title": "Voice Doc: Azure konfigurieren",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "voiceDocPlugin.testSTTProviders",
+        "title": "Voice Doc: STT-Provider testen",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "voiceDocPlugin.enableDemoMode",
+        "title": "Voice Doc: Demo-Modus aktivieren",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "voiceDocPlugin.showUsageStats",
+        "title": "Voice Doc: API-Nutzung anzeigen",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "voiceDocPlugin.toggleAutoMode",
+        "title": "Voice Doc: Auto-Modus umschalten",
+        "icon": "$(robot)"
+      },
+      {
+        "command": "voiceDocPlugin.analyzeCurrentFunction",
+        "title": "Voice Doc: Aktuelle Funktion analysieren",
+        "icon": "$(search)"
+      },
+      {
+        "command": "voiceDocPlugin.showStatistics",
+        "title": "Voice Doc: Lern-Statistiken anzeigen",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "voiceDocPlugin.trainFromFeedback",
+        "title": "Voice Doc: Aus Feedback lernen",
+        "icon": "$(mortar-board)"
       }
     ],
     "keybindings": [
@@ -73,9 +114,27 @@
         "key": "ctrl+shift+c",
         "mac": "cmd+shift+c",
         "when": "editorHasSelection"
+      },
+      {
+        "command": "voiceDocPlugin.toggleAutoMode",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorTextFocus"
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "voiceDocPlugin.toggleRecording",
+          "group": "navigation",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "voiceDocPlugin.toggleAutoMode",
+          "group": "navigation",
+          "when": "editorIsOpen"
+        }
+      ],
       "editor/context": [
         {
           "command": "voiceDocPlugin.toggleRecording",
@@ -88,7 +147,7 @@
           "when": "editorHasSelection"
         },
         {
-          "command": "voiceDocPlugin.insertFromClipboard",
+          "command": "voiceDocPlugin.analyzeCurrentFunction",
           "group": "voiceDoc@3",
           "when": "editorTextFocus"
         }
@@ -97,11 +156,32 @@
     "configuration": {
       "title": "Voice Documentation Plugin",
       "properties": {
-        "voiceDocPlugin.openAIApiKey": {
+        "voiceDocPlugin.sttProvider": {
           "type": "string",
-          "default": "",
-          "description": "OpenAI API Key für GPT",
-          "markdownDescription": "Erhalten Sie Ihren API Key unter [platform.openai.com](https://platform.openai.com/api-keys)"
+          "default": "auto",
+          "enum": [
+            "openai",
+            "azure",
+            "auto"
+          ],
+          "enumDescriptions": [
+            "OpenAI Whisper API (empfohlen)",
+            "Azure Cognitive Services",
+            "Automatisch besten Provider wählen"
+          ],
+          "description": "Speech-to-Text Provider"
+        },
+        "voiceDocPlugin.azureRegion": {
+          "type": "string",
+          "default": "westeurope",
+          "enum": [
+            "westeurope",
+            "northeurope",
+            "eastus",
+            "westus2",
+            "southeastasia"
+          ],
+          "description": "Azure Region für Cognitive Services"
         },
         "voiceDocPlugin.language": {
           "type": "string",
@@ -109,16 +189,40 @@
           "enum": [
             "de-DE",
             "en-US",
-            "en-GB"
+            "en-GB",
+            "fr-FR",
+            "es-ES",
+            "it-IT",
+            "pt-PT"
           ],
-          "description": "Sprache für die Spracherkennung"
+          "description": "Sprache für Spracherkennung"
         },
-        "voiceDocPlugin.multilineThreshold": {
+        "voiceDocPlugin.autoMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatische Code-Analyse aktivieren"
+        },
+        "voiceDocPlugin.minConfidence": {
           "type": "number",
-          "default": 80,
-          "minimum": 40,
-          "maximum": 200,
-          "description": "Zeichenanzahl ab der mehrzeilige Kommentare verwendet werden"
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimale Konfidenz für automatische Dokumentationsvorschläge (0-1)"
+        },
+        "voiceDocPlugin.learningEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Lern-System aktivieren - Plugin lernt aus Feedback"
+        },
+        "voiceDocPlugin.commentStyle": {
+          "type": "string",
+          "default": "JSDoc",
+          "enum": [
+            "JSDoc",
+            "Standard",
+            "Inline"
+          ],
+          "description": "Stil der generierten Kommentare"
         }
       }
     }
@@ -127,23 +231,35 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js",
-    "start": "code --extensionDevelopmentPath=.",
-    "debug": "npm run compile && code --extensionDevelopmentPath=."
+    "test": "npm run compile && node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "@azure/core-auth": "^1.5.0",
+    "axios": "^1.12.2",
+    "form-data": "^4.0.4",
+    "microsoft-cognitiveservices-speech-sdk": "^1.46.0"
   },
   "devDependencies": {
+    "@types/form-data": "^2.2.1",
+    "@types/mocha": "^10.0.10",
     "@types/node": "16.x",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.70.0",
     "@typescript-eslint/eslint-plugin": "^5.31.0",
     "@typescript-eslint/parser": "^5.31.0",
+    "@vscode/test-electron": "^2.3.0",
     "eslint": "^8.20.0",
-    "rimraf": "^6.0.1",
+    "mocha": "^10.8.2",
+    "sinon": "^21.0.0",
     "typescript": "^4.7.4"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/azad-ahmed/vscode-voice-doc-plugin.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": {
+    "name": "Azad Ahmed"
+  }
 }
