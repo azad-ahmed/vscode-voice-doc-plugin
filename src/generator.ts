@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as https from 'https';
 import { ConfigManager } from './utils/configManager';
 import { ErrorHandler } from './utils/errorHandler';
+import { DemoGPTEnhancer } from './utils/demoGPTEnhancer';
 
 
 export class CommentGenerator {
@@ -49,9 +50,13 @@ export class CommentGenerator {
     }
 
     public async enhanceWithOpenAI(transcript: string, codeContext: string | null): Promise<string> {
+        // ✨ Verwende Demo-GPT-Enhancer wenn kein API-Key vorhanden
         if (!this.openAIApiKey) {
-            throw new Error('OpenAI API Key nicht konfiguriert');
+            ErrorHandler.log('CommentGenerator', 'Nutze Demo-GPT-Verbesserung');
+            return DemoGPTEnhancer.enhanceComment(transcript, codeContext || '');
         }
+        
+
 
         return new Promise((resolve, reject) => {
             const requestBody = JSON.stringify({

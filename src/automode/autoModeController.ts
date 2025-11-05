@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
 import { CodeAnalyzer, CodeContext, AnalysisResult } from '../analysis/codeAnalyzer';
 import { LearningSystem } from '../learning/learningSystem';
+import { ProjectMonitor } from './projectMonitor';
 
+/**
+ * Auto-Mode Controller - Überwacht GESAMTES Projekt automatisch
+ */
 export class AutoModeController {
-    private documentChangeListener?: vscode.Disposable;
-    private analysisTimeout?: NodeJS.Timeout;
     private isEnabled: boolean = false;
     private statusBarItem: vscode.StatusBarItem;
+    private projectMonitor: ProjectMonitor;
 
     constructor(
         private codeAnalyzer: CodeAnalyzer,
@@ -18,34 +21,95 @@ export class AutoModeController {
         this.updateStatusBar();
         this.statusBarItem.show();
         context.subscriptions.push(this.statusBarItem);
+
+        // Erstelle Project Monitor
+        this.projectMonitor = new ProjectMonitor(codeAnalyzer, learningSystem, context);
     }
 
-    enable(): void {
-        if (this.isEnabled) return;
+    /**
+     * Aktiviert Auto-Mode (= Projekt-Überwachung)
+     */
+    async enable(): Promise<void> {
+        if (this.isEnabled) {
+            vscode.window.showInformationMessage('🤖 Auto-Modus ist bereits aktiviert');
+            return;
+        }
+
+        // Bestätigungsdialog
+        const confirmation = await vscode.window.showInformationMessage(
+            '🔍 Auto-Modus aktivieren?\n\n' +
+            '✨ Überwacht ALLE Code-Dateien im Projekt\n' +
+            '🆕 Erkennt neue Klassen und Funktionen automatisch\n' +
+            '📝 Schlägt Dokumentation vor\n' +
+            '🎯 Minimum Konfidenz: ' + (this.getMinConfidence() * 100) + '%\n\n' +
+            '⚠️ Bei grossen Projekten kann dies Performance-Auswirkungen haben.',
+            { modal: true },
+            'Aktivieren',
+            'Abbrechen'
+        );
+
+        if (confirmation !== 'Aktivieren') {
+            return;
+        }
 
         this.isEnabled = true;
-        this.startMonitoring();
+        this.projectMonitor.start();
         this.updateStatusBar();
-        vscode.window.showInformationMessage('🤖 Auto-Modus aktiviert - Code wird automatisch analysiert');
+        
+        vscode.window.showInformationMessage(
+            '🔍 Auto-Modus aktiviert!\n\n' +
+            '✨ Projekt wird überwacht\n' +
+            '🆕 Neue Klassen werden erkannt\n' +
+            '📝 Dokumentations-Vorschläge erscheinen automatisch\n' +
+            '💡 Zum Deaktivieren: Ctrl+Shift+A'
+        );
     }
 
+    /**
+     * Deaktiviert Auto-Mode
+     */
     disable(): void {
         if (!this.isEnabled) return;
 
         this.isEnabled = false;
-        this.stopMonitoring();
+        this.projectMonitor.stop();
         this.updateStatusBar();
+        
         vscode.window.showInformationMessage('Auto-Modus deaktiviert');
     }
 
-    toggle(): void {
+    /**
+     * Wechselt Auto-Mode an/aus
+     */
+    async toggle(): Promise<void> {
         if (this.isEnabled) {
             this.disable();
         } else {
-            this.enable();
+            await this.enable();
         }
     }
 
+    /**
+     * Aktiviert Auto-Mode direkt (ohne Bestätigung)
+     */
+    enableDirect(): void {
+        if (this.isEnabled) return;
+
+        this.isEnabled = true;
+        this.projectMonitor.start();
+        this.updateStatusBar();
+    }
+
+    /**
+     * Gibt zurück ob Auto-Mode aktiviert ist
+     */
+    isActive(): boolean {
+        return this.isEnabled;
+    }
+
+    /**
+     * Analysiert die aktuelle Funktion manuell
+     */
     async analyzeCurrentFunction(): Promise<void> {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -56,110 +120,47 @@ export class AutoModeController {
         const position = editor.selection.active;
         const codeContext = this.getCodeContext(editor, position);
 
-        vscode.window.showInformationMessage('Analysiere Code...');
-
-        try {
-            const analysis = await this.codeAnalyzer.analyzeCode(codeContext);
-            await this.suggestDocumentation(analysis, position, codeContext, editor);
-        } catch (error) {
-            vscode.window.showErrorMessage(`Analyse fehlgeschlagen: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`);
-        }
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Analysiere Code...',
+            cancellable: false
+        }, async () => {
+            try {
+                const analysis = await this.codeAnalyzer.analyzeCode(codeContext);
+                await this.suggestDocumentation(analysis, position, codeContext, editor);
+            } catch (error) {
+                vscode.window.showErrorMessage(
+                    `Analyse fehlgeschlagen: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`
+                );
+            }
+        });
     }
 
+    /**
+     * Aktualisiert die Status-Leiste
+     */
     private updateStatusBar(): void {
         if (this.isEnabled) {
-            this.statusBarItem.text = "$(robot) Auto-Modus";
-            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-            this.statusBarItem.tooltip = "Auto-Modus aktiviert - Klicken zum Deaktivieren";
+            this.statusBarItem.text = "$(eye) Auto-Modus";
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+            this.statusBarItem.tooltip = 
+                "Auto-Modus AKTIV\n\n" +
+                "✨ Projekt wird überwacht\n" +
+                "🆕 Neue Klassen werden erkannt\n" +
+                "📝 Automatische Dokumentation\n\n" +
+                "Klicken zum Deaktivieren (oder Ctrl+Shift+A)";
         } else {
             this.statusBarItem.text = "$(circle-slash) Auto-Modus";
             this.statusBarItem.backgroundColor = undefined;
-            this.statusBarItem.tooltip = "Auto-Modus deaktiviert - Klicken zum Aktivieren";
+            this.statusBarItem.tooltip = 
+                "Auto-Modus deaktiviert\n\n" +
+                "Klicken zum Aktivieren (oder Ctrl+Shift+A)";
         }
     }
 
-    private startMonitoring(): void {
-        if (this.documentChangeListener) return;
-
-        this.documentChangeListener = vscode.workspace.onDidChangeTextDocument(async (event) => {
-            if (!this.isEnabled) return;
-            
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || event.document !== editor.document) return;
-
-            clearTimeout(this.analysisTimeout);
-            this.analysisTimeout = setTimeout(async () => {
-                await this.autoAnalyzeCode(editor, event);
-            }, 3000);
-        });
-
-        this.context.subscriptions.push(this.documentChangeListener);
-    }
-
-    private stopMonitoring(): void {
-        if (this.documentChangeListener) {
-            this.documentChangeListener.dispose();
-            this.documentChangeListener = undefined;
-        }
-        if (this.analysisTimeout) {
-            clearTimeout(this.analysisTimeout);
-        }
-    }
-
-    private async autoAnalyzeCode(
-        editor: vscode.TextEditor,
-        event: vscode.TextDocumentChangeEvent
-    ): Promise<void> {
-        try {
-            const changes = event.contentChanges;
-            if (changes.length === 0) return;
-
-            const lastChange = changes[changes.length - 1];
-            const newText = lastChange.text;
-
-            if (this.isNewFunctionOrClass(newText)) {
-                const position = lastChange.range.start;
-                const codeContext = this.getCodeContext(editor, position);
-
-                if (this.isAlreadyDocumented(editor.document, position)) {
-                    return;
-                }
-
-                const analysis = await this.codeAnalyzer.analyzeCode(codeContext);
-
-                if (analysis.confidence >= this.getMinConfidence()) {
-                    await this.suggestDocumentation(analysis, position, codeContext, editor);
-                }
-            }
-
-        } catch (error) {
-            console.error('Auto-Analyse Fehler:', error);
-        }
-    }
-
-    private isNewFunctionOrClass(text: string): boolean {
-        const patterns = [
-            /function\s+\w+\s*\(/,
-            /const\s+\w+\s*=\s*(?:async\s*)?\(/,
-            /class\s+\w+/,
-            /def\s+\w+\s*\(/,  // Python
-            /=>\s*\{/
-        ];
-        
-        return patterns.some(pattern => pattern.test(text));
-    }
-
-    private isAlreadyDocumented(document: vscode.TextDocument, position: vscode.Position): boolean {
-        const line = position.line;
-        if (line === 0) return false;
-
-        const previousLine = document.lineAt(line - 1).text.trim();
-        return previousLine.startsWith('/*') || 
-               previousLine.startsWith('//') ||
-               previousLine.startsWith('*') ||
-               previousLine.startsWith('#');  // Python
-    }
-
+    /**
+     * Erstellt Code-Kontext für Analyse
+     */
     private getCodeContext(editor: vscode.TextEditor, position: vscode.Position): CodeContext {
         const document = editor.document;
         const lineCount = document.lineCount;
@@ -181,6 +182,9 @@ export class AutoModeController {
         };
     }
 
+    /**
+     * Erkennt Funktion oder Klasse an Position
+     */
     private detectFunctionOrClass(document: vscode.TextDocument, position: vscode.Position): { name: string; type: any } {
         const text = document.getText();
         const offset = document.offsetAt(position);
@@ -216,6 +220,9 @@ export class AutoModeController {
         return closestFunction;
     }
 
+    /**
+     * Schlägt Dokumentation vor
+     */
     private async suggestDocumentation(
         analysis: AnalysisResult,
         position: vscode.Position,
@@ -246,7 +253,9 @@ export class AutoModeController {
                 timestamp: Date.now()
             });
 
-            setTimeout(() => this.requestFeedback(comment, analysis.description, codeContext), 2000);
+            vscode.window.showInformationMessage(
+                `✅ Dokumentation für "${codeContext.functionName}" eingefügt!`
+            );
 
         } else if (action === 'Bearbeiten') {
             const edited = await vscode.window.showInputBox({
@@ -273,6 +282,10 @@ export class AutoModeController {
                     confidence: analysis.confidence,
                     timestamp: Date.now()
                 });
+
+                vscode.window.showInformationMessage(
+                    `✅ Bearbeitete Dokumentation für "${codeContext.functionName}" eingefügt!`
+                );
             }
         } else {
             // Ignoriert - negative Feedback
@@ -288,41 +301,10 @@ export class AutoModeController {
         }
     }
 
-    private async requestFeedback(_comment: string, originalText: string, codeContext: any): Promise<void> {
-        const config = vscode.workspace.getConfiguration('voiceDocPlugin');
-        const learningEnabled = config.get('learningEnabled', true);
-        
-        if (!learningEnabled) return;
-
-        const feedback = await vscode.window.showInformationMessage(
-            'War die Dokumentation hilfreich?',
-            '👍 Gut',
-            '👎 Verbesserungswürdig'
-        );
-
-        if (feedback) {
-            if (feedback === '👎 Verbesserungswürdig') {
-                const improvement = await vscode.window.showInputBox({
-                    prompt: 'Wie könnte die Dokumentation verbessert werden?',
-                    placeHolder: 'Ihre Verbesserungsvorschläge...'
-                });
-
-                if (improvement) {
-                    // Speichere negatives Feedback mit Verbesserung
-                    this.learningSystem.addTrainingExample({
-                        input: originalText,
-                        output: improvement,
-                        codeContext: codeContext,
-                        source: 'feedback',
-                        timestamp: Date.now()
-                    });
-                }
-            }
-        }
-    }
-
+    /**
+     * Formatiert Kommentar nach Sprache
+     */
     private formatComment(text: string, languageId: string): string {
-        // Formatiere basierend auf Sprache
         switch (languageId) {
             case 'python':
                 return `"""\n${text}\n"""`;
@@ -339,8 +321,35 @@ export class AutoModeController {
         }
     }
 
+    /**
+     * Holt minimale Konfidenz aus Einstellungen
+     */
     private getMinConfidence(): number {
         const config = vscode.workspace.getConfiguration('voiceDocPlugin');
         return config.get('minConfidence', 0.7);
+    }
+
+    /**
+     * Cleanup
+     */
+    dispose(): void {
+        this.disable();
+        this.projectMonitor.dispose();
+        this.statusBarItem.dispose();
+    }
+
+    /**
+     * Backwards compatibility - alte Methoden
+     */
+    async enableProjectMode(): Promise<void> {
+        await this.enable();
+    }
+
+    disableProjectMode(): void {
+        this.disable();
+    }
+
+    async toggleProjectMode(): Promise<void> {
+        await this.toggle();
     }
 }

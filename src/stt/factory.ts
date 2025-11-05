@@ -2,6 +2,7 @@ import { STTProvider, STTConfig } from './types';
 import { OpenAIWhisperProvider } from './providers/whisper';
 import { AzureSTTProvider } from './providers/azure';
 import { SimulatedSTTProvider } from './providers/webSpeech';
+import { EnhancedDemoProvider } from './providers/enhancedDemo';
 import { ConfigManager } from '../utils/configManager';
 import { ErrorHandler } from '../utils/errorHandler';
 import * as vscode from 'vscode';
@@ -72,7 +73,7 @@ export class STTFactory {
         const demoConfirmed = await this.confirmDemoMode();
         
         if (demoConfirmed) {
-            return new SimulatedSTTProvider();
+            return new EnhancedDemoProvider();
         }
         
         throw new Error('Kein STT-Provider verfügbar und Demo-Modus nicht aktiviert');

@@ -3,6 +3,7 @@ import { CommentGenerator } from './generator';
 import { IntegratedVoiceHandler } from './integratedVoiceHandler';
 import { STTFactory } from './stt/factory';
 import { ErrorHandler } from './utils/errorHandler';
+import { AutoDemoManager } from './utils/autoDemoManager';
 import { ConfigManager } from './utils/configManager';
 import { ApiUsageTracker } from './utils/apiUsageTracker';
 import { AutoCommentMonitor } from './utils/autoCommentMonitor';
@@ -22,12 +23,20 @@ let learningSystem: LearningSystem;
 let codeAnalyzer: CodeAnalyzer;
 let autoModeController: AutoModeController;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('Voice Documentation');
     context.subscriptions.push(outputChannel);
     
     ErrorHandler.initialize(outputChannel);
     ConfigManager.initialize(context);
+    // ✨ Demo-Modus Manager initialisieren
+    await AutoDemoManager.checkAndInitialize(context);
+    const isDemoMode = AutoDemoManager.isDemoMode(context);
+    if (isDemoMode) {
+        outputChannel.appendLine('🎮 Demo-Modus ist aktiv');
+    }
+    
+
     ApiUsageTracker.initialize(context);
     
     outputChannel.appendLine('='.repeat(50));
@@ -101,11 +110,17 @@ export function activate(context: vscode.ExtensionContext) {
 
         outputChannel.appendLine('='.repeat(50));
         outputChannel.appendLine('✅ Voice Documentation Plugin aktiviert');
-        outputChannel.appendLine('✨ Erweiterte Features: Auto-Modus, Lernsystem, Code-Analyse');
+        outputChannel.appendLine('✨ Features:');
+        outputChannel.appendLine('  🎤 Voice Recording (Ctrl+Shift+R)');
+        outputChannel.appendLine('  👁️ Auto-Modus (Ctrl+Shift+A) - Überwacht GESAMTES Projekt!');
+        outputChannel.appendLine('  🤖 Lern-System aktiv');
+        outputChannel.appendLine('  📊 Code-Analyse verfügbar');
         outputChannel.appendLine('='.repeat(50));
         
         vscode.window.showInformationMessage(
-            '🎤 Voice Doc erweitert! Voice (Ctrl+Shift+R) | Auto (Ctrl+Shift+A)'
+            '🎤 Voice Doc bereit!\n\n' +
+            '🎵 Voice: Ctrl+Shift+R\n' +
+            '👁️ Auto-Modus: Ctrl+Shift+A (Überwacht ALLES!)'
         );
         
     } catch (error: any) {
@@ -146,12 +161,12 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ NEU: Auto-Mode Commands
+    // ✨ Auto-Mode Command (überwacht GESAMTES Projekt)
     context.subscriptions.push(
-        vscode.commands.registerCommand('voiceDocPlugin.toggleAutoMode', () => {
+        vscode.commands.registerCommand('voiceDocPlugin.toggleAutoMode', async () => {
             try {
-                ErrorHandler.log('Command', 'Toggle Auto-Mode');
-                autoModeController.toggle();
+                ErrorHandler.log('Command', 'Toggle Auto-Mode (Projekt-Überwachung)');
+                await autoModeController.toggle();
             } catch (error: any) {
                 ErrorHandler.handleError('toggleAutoMode', error);
             }
@@ -291,6 +306,43 @@ function registerCommands(context: vscode.ExtensionContext) {
                 await ApiUsageTracker.showUsageReport();
             } catch (error: any) {
                 ErrorHandler.handleError('showUsageStats', error);
+            }
+        })
+    );
+
+    
+    // ✨ Demo-Modus Commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.showDemoTutorial', async () => {
+            try {
+                await AutoDemoManager.showDemoTutorial();
+            } catch (error: any) {
+                ErrorHandler.handleError('showDemoTutorial', error);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.showDemoStats', async () => {
+            try {
+                await AutoDemoManager.showDemoStats(context);
+            } catch (error: any) {
+                ErrorHandler.handleError('showDemoStats', error);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.toggleDemoMode', async () => {
+            try {
+                const isDemo = AutoDemoManager.isDemoMode(context);
+                if (isDemo) {
+                    await AutoDemoManager.disableDemoMode(context);
+                } else {
+                    await AutoDemoManager.enableDemoMode(context);
+                }
+            } catch (error: any) {
+                ErrorHandler.handleError('toggleDemoMode', error);
             }
         })
     );

@@ -1,96 +1,134 @@
 # Changelog
 
-Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
+All notable changes to the "Voice Documentation Plugin" extension will be documented in this file.
 
-Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
-und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2025-01-11
+## [1.0.0] - 2025-01-05
 
-### ✅ Hinzugefügt
-- **Voice-to-Comment Feature**: Sprachaufnahme und automatische Kommentar-Generierung
-- **Multi-Provider STT**: OpenAI Whisper und Azure Cognitive Services Integration
-- **KI-Verbesserung**: GPT-4 Integration für intelligente Dokumentations-Optimierung
-- **Auto-Modus**: Automatische Code-Analyse und Dokumentations-Vorschläge
-- **Lern-System**: ML-basiertes System das aus Benutzer-Feedback lernt
-- **Code-Analyse**: Komplexitäts-Messung und Pattern-Erkennung
-- **Multi-Language Support**: TypeScript, JavaScript, Python
-- **Flexible Kommentar-Stile**: JSDoc, Standard, Inline
-- **API Usage Tracking**: Überwachung der OpenAI/Azure API Nutzung
-- **Error Handler**: Zentralisierte Fehlerbehandlung mit Logging
-- **Config Manager**: Konfigurationsmanagement mit Secret Storage
-- **Umfassende Tests**: Unit und Integration Tests
+### ✨ Initial Release - Diplomarbeit Projekt
 
-### 🔧 Behoben
-- TypeScript Kompilierungsfehler behoben
-- DOM Type-Definitionen hinzugefügt
-- CodeElement Interface vollständig implementiert
-- Null-Safety in autoCommentator und autoCommentMonitor
-- Azure Core Auth Dependency hinzugefügt
-- Type Guards für optionale Properties implementiert
-- ErrorHandler Signaturen korrigiert
+#### Added
+- **Voice-to-Text Documentation**: Record voice explanations and convert them to code comments
+  - Speech-to-Text with OpenAI Whisper API
+  - Alternative Azure Cognitive Services support
+  - Multi-language support (DE, EN, FR, ES, IT, PT)
+  
+- **Auto-Mode (Project-wide Monitoring)**: 
+  - Automatic detection of new classes and functions
+  - AI-powered documentation suggestions
+  - Confidence-based filtering (default 70%)
+  - Toggle with `Ctrl+Shift+A`
+  
+- **Learning System**:
+  - Learns from user feedback
+  - Improves documentation quality over time
+  - Pattern recognition
+  - Custom glossary building
+  
+- **Multi-Language Support**:
+  - TypeScript/JavaScript
+  - Python
+  - Java
+  - C#
+  - Go
+  - Rust
+  - C/C++
+  
+- **Code Analysis**:
+  - AI-powered code understanding
+  - Context-aware documentation generation
+  - Complexity analysis
+  - Function/Class detection
+  
+- **User Interface**:
+  - Status bar integration
+  - Keyboard shortcuts (Ctrl+Shift+R, Ctrl+Shift+A, Ctrl+Shift+C)
+  - Command palette integration
+  - Context menu options
+  
+- **Configuration Options**:
+  - STT Provider selection (OpenAI/Azure/Auto)
+  - Language settings
+  - Confidence threshold adjustment
+  - Comment style customization
+  - Auto-Mode enable/disable
+  
+- **Demo Mode**:
+  - Simulated speech-to-text for testing
+  - No API keys required for demo
+  - Tutorial and statistics
 
-### 📝 Geändert
-- README.md vollständig überarbeitet
-- Projektstruktur bereinigt
-- Unnötige MD-Dateien entfernt
-- tsconfig.json optimiert (skipLibCheck, DOM Types)
+#### Features
+- 🎤 Voice Recording with `Ctrl+Shift+R`
+- 👁️ Auto-Mode with `Ctrl+Shift+A`
+- 🤖 AI-powered comment generation
+- 📊 Usage statistics and analytics
+- 🎓 Learning from user feedback
+- 🌍 Multi-language support (7 languages)
+- 💾 Persistent configuration
+- 🔐 Secure API key storage
 
-### 🗑️ Entfernt
-- Obsolete Dokumentations-Dateien (COMPILATION-FIX.md, etc.)
-- Überflüssige Cleanup-Scripts
-- Temp-Verzeichnis
+### Technical Details
+- Built with TypeScript
+- VS Code Extension API 1.70.0+
+- OpenAI GPT-4 Integration
+- Azure Cognitive Services Integration
+- Modular architecture with clear separation of concerns
 
-### 📦 Dependencies
-- axios: ^1.12.2
-- form-data: ^4.0.4
-- microsoft-cognitiveservices-speech-sdk: ^1.46.0
-- @azure/core-auth: ^1.5.0
-
-### 🧪 Testing
-- Mocha Test Framework integriert
-- Sinon für Mocking
-- VS Code Test Runner konfiguriert
-
-### 📚 Dokumentation
-- ARCHITECTURE.md: Detaillierte Architektur-Dokumentation
-- USER_GUIDE.md: Ausführliches Benutzerhandbuch
-- CONTRIBUTING.md: Beitrags-Richtlinien
-- Inline Code-Dokumentation mit JSDoc
-
-### 🎯 Projektziele (Diplomarbeit)
-- ✅ Z1: Sprachaufnahme-Feature implementiert
-- ✅ Z2: Speech-to-Text mit >80% Genauigkeit
-- ✅ Z3: KI-generierte Dokumentation mit >90% Verständlichkeit
-- ✅ Z4: VS Code Integration nahtlos
-- ✅ Z5: Intuitive Benutzeroberfläche
+### Documentation
+- Comprehensive README.md
+- Architecture documentation (ARCHITECTURE.md)
+- Auto-Mode guide (AUTO_MODUS_ANLEITUNG.md)
+- Quick-Start guide (QUICK-START.md)
+- Installation instructions (INSTALLATION.md)
+- User guide (USER_GUIDE.md)
 
 ---
 
 ## [Unreleased]
 
-### Geplant für v1.1.0
-- [ ] Sprachbefehle für Navigation
-- [ ] Team-Kollaboration Features
-- [ ] Offline STT Option
-- [ ] Erweiterte Code-Pattern-Erkennung
-- [ ] Web-Dashboard für Statistiken
-- [ ] Weitere Sprachen (Französisch, Spanisch, Italienisch)
-
-### Bekannte Probleme
-- Keine bekannten kritischen Bugs
-- Performance-Optimierung bei großen Dateien geplant
-- Azure STT Offline-Modus in Arbeit
+### Planned Features
+- Offline STT with local Whisper models
+- Batch processing for multiple files
+- Team-shared configurations
+- Additional language support
+- Enhanced audio processing (noise reduction, normalization)
+- Cloud sync for settings
+- Analytics dashboard
 
 ---
 
-## Versionierungs-Schema
+## Development Notes
 
-**MAJOR.MINOR.PATCH**
-- **MAJOR**: Inkompatible API-Änderungen
-- **MINOR**: Neue Features (rückwärtskompatibel)
-- **PATCH**: Bugfixes (rückwärtskompatibel)
+### Project Structure
+```
+vscode-voice-doc-plugin/
+├── src/
+│   ├── analysis/      # Code analysis and AI integration
+│   ├── audio/         # Audio recording
+│   ├── automode/      # Project-wide monitoring
+│   ├── learning/      # ML-based learning system
+│   ├── stt/           # Speech-to-Text providers
+│   ├── types/         # TypeScript type definitions
+│   └── utils/         # Utility functions
+```
+
+### Key Technologies
+- TypeScript 4.7.4
+- VS Code Extension API
+- OpenAI API (GPT-4, Whisper)
+- Azure Cognitive Services
+- Node.js 16+
+
+### Build & Test
+```bash
+npm install
+npm run compile
+npm test
+```
 
 ---
 
-[1.0.0]: https://github.com/azad-ahmed/vscode-voice-doc-plugin/releases/tag/v1.0.0
+**For detailed changes, see the [commit history](https://github.com/azad-ahmed/vscode-voice-doc-plugin/commits/main).**
