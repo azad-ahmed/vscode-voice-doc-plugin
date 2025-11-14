@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { CodeAnalyzer, CodeContext, AnalysisResult } from '../analysis/codeAnalyzer';
 import { LearningSystem } from '../learning/learningSystem';
-import { ProjectMonitor } from './projectMonitor';
+// ProjectMonitor entfernt - nur manuelle Analyse
 
 /**
  * Auto-Mode Controller - Überwacht GESAMTES Projekt automatisch
@@ -9,7 +9,7 @@ import { ProjectMonitor } from './projectMonitor';
 export class AutoModeController {
     private isEnabled: boolean = false;
     private statusBarItem: vscode.StatusBarItem;
-    private projectMonitor: ProjectMonitor;
+    // ProjectMonitor entfernt - nur manuelle Analyse
 
     constructor(
         private codeAnalyzer: CodeAnalyzer,
@@ -22,12 +22,11 @@ export class AutoModeController {
         this.statusBarItem.show();
         context.subscriptions.push(this.statusBarItem);
 
-        // Erstelle Project Monitor
-        this.projectMonitor = new ProjectMonitor(codeAnalyzer, learningSystem, context);
+        // ProjectMonitor entfernt - nur manuelle Analyse
     }
 
     /**
-     * Aktiviert Auto-Mode (= Projekt-Überwachung)
+     * Aktiviert Auto-Mode (nur Status, keine automatische Überwachung)
      */
     async enable(): Promise<void> {
         if (this.isEnabled) {
@@ -35,33 +34,16 @@ export class AutoModeController {
             return;
         }
 
-        // Bestätigungsdialog
-        const confirmation = await vscode.window.showInformationMessage(
-            '🔍 Auto-Modus aktivieren?\n\n' +
-            '✨ Überwacht ALLE Code-Dateien im Projekt\n' +
-            '🆕 Erkennt neue Klassen und Funktionen automatisch\n' +
-            '📝 Schlägt Dokumentation vor\n' +
-            '🎯 Minimum Konfidenz: ' + (this.getMinConfidence() * 100) + '%\n\n' +
-            '⚠️ Bei grossen Projekten kann dies Performance-Auswirkungen haben.',
-            { modal: true },
-            'Aktivieren',
-            'Abbrechen'
-        );
-
-        if (confirmation !== 'Aktivieren') {
-            return;
-        }
-
         this.isEnabled = true;
-        this.projectMonitor.start();
+        // ProjectMonitor wird NICHT mehr gestartet
         this.updateStatusBar();
         
         vscode.window.showInformationMessage(
-            '🔍 Auto-Modus aktiviert!\n\n' +
-            '✨ Projekt wird überwacht\n' +
-            '🆕 Neue Klassen werden erkannt\n' +
-            '📝 Dokumentations-Vorschläge erscheinen automatisch\n' +
-            '💡 Zum Deaktivieren: Ctrl+Shift+A'
+            '✅ Bereit für manuelle Code-Analyse!\n\n' +
+            '📝 Cursor auf Funktion/Klasse setzen\n' +
+            '⌨️ Dann: Ctrl+Shift+P → "Voice Doc: Aktuelle Funktion analysieren"\n' +
+            '🖱️ Oder: Rechtsklick → Voice Doc\n\n' +
+            '💡 Keine automatische Überwachung - volle Kontrolle!'
         );
     }
 
@@ -72,7 +54,7 @@ export class AutoModeController {
         if (!this.isEnabled) return;
 
         this.isEnabled = false;
-        this.projectMonitor.stop();
+        // ProjectMonitor wird NICHT mehr gestoppt (war nie gestartet)
         this.updateStatusBar();
         
         vscode.window.showInformationMessage('Auto-Modus deaktiviert');
@@ -96,7 +78,7 @@ export class AutoModeController {
         if (this.isEnabled) return;
 
         this.isEnabled = true;
-        this.projectMonitor.start();
+        // ProjectMonitor wird NICHT mehr gestartet
         this.updateStatusBar();
     }
 
@@ -145,9 +127,9 @@ export class AutoModeController {
             this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
             this.statusBarItem.tooltip = 
                 "Auto-Modus AKTIV\n\n" +
-                "✨ Projekt wird überwacht\n" +
-                "🆕 Neue Klassen werden erkannt\n" +
-                "📝 Automatische Dokumentation\n\n" +
+                "📝 Manuelle Analyse verfügbar\n" +
+                "⌨️ Rechtsklick → Voice Doc → Analysieren\n" +
+                "💡 Keine automatische Überwachung\n\n" +
                 "Klicken zum Deaktivieren (oder Ctrl+Shift+A)";
         } else {
             this.statusBarItem.text = "$(circle-slash) Auto-Modus";
@@ -334,7 +316,7 @@ export class AutoModeController {
      */
     dispose(): void {
         this.disable();
-        this.projectMonitor.dispose();
+        // ProjectMonitor entfernt - nur manuelle Analyse
         this.statusBarItem.dispose();
     }
 

@@ -130,6 +130,16 @@
         "command": "voiceDocPlugin.test",
         "title": "Voice Doc: Test-Befehle ausführen",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "voiceDocPlugin.cleanupComments",
+        "title": "Voice Doc: Chaotische Kommentare bereinigen",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "voiceDocPlugin.resetOnboarding",
+        "title": "Voice Doc: Onboarding zurücksetzen",
+        "icon": "$(refresh)"
       }
     ],
     "keybindings": [

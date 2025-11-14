@@ -216,35 +216,44 @@ export class ProjectMonitor {
     }
 
     /**
-     * Findet alle Klassen im Code
+     * Findet alle Klassen im Code - NUR echte Klassendefinitionen
      */
     private findClasses(text: string, languageId: string): Array<{name: string; line: number; type: 'class'}> {
         const classes: Array<{name: string; line: number; type: 'class'}> = [];
         const lines = text.split('\n');
 
-        let classRegex: RegExp;
-        
-        switch (languageId) {
-            case 'typescript':
-            case 'javascript':
-                classRegex = /class\s+(\w+)/;
-                break;
-            case 'python':
-                classRegex = /class\s+(\w+)(?:\s*\(.*?\))?:/;
-                break;
-            case 'java':
-            case 'csharp':
-                classRegex = /(?:public|private|protected)?\s*class\s+(\w+)/;
-                break;
-            case 'go':
-                classRegex = /type\s+(\w+)\s+struct/;
-                break;
-            default:
-                classRegex = /class\s+(\w+)/;
-        }
-
         lines.forEach((line, index) => {
-            const match = line.match(classRegex);
+            const trimmedLine = line.trim();
+            
+            // Skip Kommentare
+            if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || 
+                trimmedLine.startsWith('*') || trimmedLine.startsWith('#')) {
+                return;
+            }
+
+            let match: RegExpMatchArray | null = null;
+            
+            switch (languageId) {
+                case 'typescript':
+                case 'javascript':
+                    // NUR: class ClassName { (mit optionalem export/abstract am Anfang)
+                    match = line.match(/^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Z]\w*)\s*(?:extends\s+\w+)?\s*{/);
+                    break;
+                case 'python':
+                    // NUR: class ClassName: oder class ClassName(...):
+                    match = line.match(/^\s*class\s+([A-Z]\w*)(?:\s*\(.*?\))?\s*:/);
+                    break;
+                case 'java':
+                case 'csharp':
+                    // NUR: [modifier] class ClassName {
+                    match = line.match(/^\s*(?:public|private|protected)?\s*(?:abstract|static)?\s*class\s+([A-Z]\w*)\s*(?:extends\s+\w+)?(?:implements\s+[\w,\s]+)?\s*{/);
+                    break;
+                case 'go':
+                    // NUR: type StructName struct
+                    match = line.match(/^\s*type\s+([A-Z]\w*)\s+struct\s*{/);
+                    break;
+            }
+
             if (match) {
                 classes.push({
                     name: match[1],
@@ -258,61 +267,113 @@ export class ProjectMonitor {
     }
 
     /**
-     * Findet alle Funktionen im Code
+     * Findet alle Funktionen im Code - NUR echte Funktionsdefinitionen
      */
     private findFunctions(text: string, languageId: string): Array<{name: string; line: number; type: 'function'}> {
         const functions: Array<{name: string; line: number; type: 'function'}> = [];
         const lines = text.split('\n');
 
-        let functionRegexes: RegExp[];
-        
-        switch (languageId) {
-            case 'typescript':
-            case 'javascript':
-                functionRegexes = [
-                    /function\s+(\w+)\s*\(/,
-                    /(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/,
-                    /(?:async\s+)?(\w+)\s*\([^)]*\)\s*{/,
-                ];
-                break;
-            case 'python':
-                functionRegexes = [
-                    /def\s+(\w+)\s*\(/,
-                ];
-                break;
-            case 'java':
-            case 'csharp':
-                functionRegexes = [
-                    /(?:public|private|protected|static|async)?\s+(?:\w+\s+)?(\w+)\s*\([^)]*\)\s*{/,
-                ];
-                break;
-            case 'go':
-                functionRegexes = [
-                    /func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)\s*\(/,
-                ];
-                break;
-            default:
-                functionRegexes = [
-                    /function\s+(\w+)\s*\(/,
-                    /def\s+(\w+)\s*\(/,
-                ];
-        }
-
         lines.forEach((line, index) => {
-            for (const regex of functionRegexes) {
-                const match = line.match(regex);
-                if (match) {
+            const trimmedLine = line.trim();
+            
+            // Skip Kommentare
+            if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || 
+                trimmedLine.startsWith('*') || trimmedLine.startsWith('#')) {
+                return;
+            }
+
+            let match: RegExpMatchArray | null = null;
+            
+            switch (languageId) {
+                case 'typescript':
+                case 'javascript':
+                    // 1. function functionName() {
+                    if (!match) {
+                        match = line.match(/^\s*(?:export\s+)?(?:async\s+)?function\s+([a-z_$][\w$]*)\s*\(/);
+                    }
+                    // 2. const/let/var functionName = function() {
+                    if (!match) {
+                        match = line.match(/^\s*(?:const|let|var)\s+([a-z_$][\w$]*)\s*=\s*(?:async\s+)?function\s*\(/);
+                    }
+                    // 3. const/let/var functionName = (...) =>
+                    if (!match) {
+                        match = line.match(/^\s*(?:const|let|var)\s+([a-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/);
+                    }
+                    // 4. async methodName() { oder methodName() { (Klassen-Methoden mit Modifier)
+                    if (!match && (line.includes('async ') || line.includes('static '))) {
+                        match = line.match(/^\s*(?:async|static)\s+([a-z_$][\w$]*)\s*\(/);
+                    }
+                    break;
+
+                case 'python':
+                    // def function_name(:
+                    match = line.match(/^\s*(?:async\s+)?def\s+([a-z_][\w]*)\s*\(/);
+                    break;
+
+                case 'java':
+                case 'csharp':
+                    // [modifier] returnType methodName(...)
+                    match = line.match(/^\s*(?:public|private|protected)\s+(?:static\s+)?(?:async\s+)?\w+\s+([a-z_$][\w$]*)\s*\(/);
+                    break;
+
+                case 'go':
+                    // func functionName(...) {
+                    match = line.match(/^\s*func\s+(?:\(\w+\s+\*?\w+\)\s+)?([a-z_][\w]*)\s*\(/);
+                    break;
+            }
+
+            if (match) {
+                const functionName = match[1];
+                
+                // Validierung: Nur echte Funktionsnamen
+                if (this.isValidFunctionName(functionName, languageId)) {
                     functions.push({
-                        name: match[1],
+                        name: functionName,
                         line: index,
                         type: 'function'
                     });
-                    break;
                 }
             }
         });
 
         return functions;
+    }
+
+    /**
+     * Validiert ob ein Name ein echter Funktionsname ist
+     */
+    private isValidFunctionName(name: string, languageId: string): boolean {
+        // JavaScript/TypeScript Keywords ausschließen
+        const jsKeywords = [
+            'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'catch', 'try',
+            'return', 'throw', 'break', 'continue', 'typeof', 'instanceof',
+            'new', 'delete', 'void', 'yield', 'await', 'import', 'export',
+            'default', 'extends', 'implements', 'package', 'private', 'protected',
+            'public', 'static', 'super', 'this', 'with', 'debugger', 'var',
+            'let', 'const', 'class', 'enum', 'interface', 'type'
+        ];
+
+        if (languageId === 'javascript' || languageId === 'typescript') {
+            if (jsKeywords.includes(name.toLowerCase())) {
+                return false;
+            }
+        }
+
+        // Python Keywords
+        const pythonKeywords = [
+            'if', 'elif', 'else', 'for', 'while', 'break', 'continue', 'pass',
+            'return', 'yield', 'import', 'from', 'as', 'try', 'except', 'finally',
+            'with', 'class', 'def', 'lambda', 'and', 'or', 'not', 'is', 'in'
+        ];
+
+        if (languageId === 'python') {
+            if (pythonKeywords.includes(name.toLowerCase())) {
+                return false;
+            }
+        }
+
+        // Name muss mit Buchstabe oder _ beginnen
+        return /^[a-z_$][\w$]*$/i.test(name);
     }
 
     /**
@@ -430,7 +491,7 @@ export class ProjectMonitor {
             input: description,
             output: comment,
             codeContext: codeContext,
-            source: 'auto-project',
+            source: 'auto',
             accepted: true,
             confidence: confidence,
             timestamp: Date.now()
@@ -471,7 +532,7 @@ export class ProjectMonitor {
                 input: description,
                 output: comment,
                 codeContext: codeContext,
-                source: 'auto-project',
+                source: 'auto',
                 accepted: true,
                 edited: true,
                 originalSuggestion: description,
@@ -520,16 +581,17 @@ export class ProjectMonitor {
      * Prüft ob Text wie neue Klasse/Funktion aussieht
      */
     private looksLikeNewClassOrFunction(text: string): boolean {
-        const patterns = [
-            /class\s+\w+/,
-            /function\s+\w+\s*\(/,
-            /const\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/,
-            /def\s+\w+\s*\(/,
-            /func\s+\w+\s*\(/,
-            /type\s+\w+\s+struct/,
-        ];
+        // Nur bei substanziellen Änderungen triggern (> 30 Zeichen)
+        if (text.length < 30) {
+            return false;
+        }
         
-        return patterns.some(pattern => pattern.test(text));
+        // Nur wenn komplette Zeile mit class oder function
+        const hasClass = /^\s*(?:export\s+)?(?:abstract\s+)?class\s+[A-Z]\w*\s+/m.test(text);
+        const hasFunction = /^\s*(?:export\s+)?(?:async\s+)?function\s+\w+\s*\(/m.test(text);
+        const hasDef = /^\s*(?:async\s+)?def\s+\w+\s*\(/m.test(text);
+        
+        return hasClass || hasFunction || hasDef;
     }
 
     /**

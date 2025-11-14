@@ -11,6 +11,9 @@ import { AutoCommentMonitor } from './utils/autoCommentMonitor';
 import { LearningSystem } from './learning/learningSystem';
 import { CodeAnalyzer } from './analysis/codeAnalyzer';
 import { AutoModeController } from './automode/autoModeController';
+import { SmartCommentPlacer } from './placement/smartCommentPlacer';
+// ✨ NEU: Onboarding Manager
+import { OnboardingManager } from './onboarding/onboardingManager';
 
 let statusBarItem: vscode.StatusBarItem;
 let autoCommentStatusBarItem: vscode.StatusBarItem;
@@ -29,6 +32,12 @@ export async function activate(context: vscode.ExtensionContext) {
     
     ErrorHandler.initialize(outputChannel);
     ConfigManager.initialize(context);
+    
+    // ✨ NEU: Prüfe ob Onboarding nötig ist
+    const onboardingCompleted = await OnboardingManager.checkAndRunOnboarding(context);
+    if (onboardingCompleted) {
+        ErrorHandler.log('Extension', '🎉 Onboarding erfolgreich abgeschlossen', 'success');
+    }
     // ✨ Demo-Modus Manager initialisieren
     await AutoDemoManager.checkAndInitialize(context);
     const isDemoMode = AutoDemoManager.isDemoMode(context);
@@ -343,6 +352,28 @@ function registerCommands(context: vscode.ExtensionContext) {
                 }
             } catch (error: any) {
                 ErrorHandler.handleError('toggleDemoMode', error);
+            }
+        })
+    );
+
+    // ✨ NEU: Chaotische Kommentare bereinigen
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.cleanupComments', async () => {
+            try {
+                await cleanupChaoticComments();
+            } catch (error: any) {
+                ErrorHandler.handleError('cleanupComments', error);
+            }
+        })
+    );
+
+    // ✨ NEU: Onboarding zurücksetzen (für Testing)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.resetOnboarding', async () => {
+            try {
+                await OnboardingManager.resetOnboarding(context);
+            } catch (error: any) {
+                ErrorHandler.handleError('resetOnboarding', error);
             }
         })
     );
@@ -915,6 +946,84 @@ async function runTestCommand() {
             break;
         }
     }
+}
+
+// ✨ NEU: Chaotische Kommentare bereinigen
+async function cleanupChaoticComments() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showWarningMessage('⚠️ Keine aktive Datei geöffnet');
+        return;
+    }
+
+    const confirmation = await vscode.window.showWarningMessage(
+        '🧹 Chaotische Kommentare bereinigen?\n\n' +
+        'Dies entfernt:  \n' +
+        '  - Verschachtelte Code-Blöcke\n' +
+        '  - Kommentare an falschen Stellen\n' +
+        '  - Duplikate\n\n' +
+        '⚠️ Diese Aktion kann nicht rückgängig gemacht werden!',
+        { modal: true },
+        'Bereinigen',
+        'Abbrechen'
+    );
+
+    if (confirmation !== 'Bereinigen') {
+        return;
+    }
+
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Bereinige Kommentare...',
+        cancellable: false
+    }, async () => {
+        try {
+            const document = editor.document;
+            const text = document.getText();
+            
+            // Bereinige problematische Patterns
+            let cleanedText = text;
+            
+            // Entferne verschachtelte ```javascript Blöcke
+            cleanedText = cleanedText.replace(/\/\*\*\s*\*?\s*```javascript[\s\S]*?```\s*\*\//g, '');
+            cleanedText = cleanedText.replace(/\/\/\s*```javascript[^\n]*/g, '');
+            
+            // Entferne leere Kommentarblöcke
+            cleanedText = cleanedText.replace(/\/\*\*\s*\*\/\n?/g, '');
+            
+            // Entferne mehrfache Leerzeilen (mehr als 2)
+            cleanedText = cleanedText.replace(/\n{4,}/g, '\n\n\n');
+            
+            // Zähle entfernte Zeilen
+            const originalLines = text.split('\n').length;
+            const cleanedLines = cleanedText.split('\n').length;
+            const removedLines = originalLines - cleanedLines;
+            
+            if (removedLines > 0) {
+                // Ersetze kompletten Dokumentinhalt
+                const fullRange = new vscode.Range(
+                    document.positionAt(0),
+                    document.positionAt(text.length)
+                );
+                
+                await editor.edit(editBuilder => {
+                    editBuilder.replace(fullRange, cleanedText);
+                });
+                
+                vscode.window.showInformationMessage(
+                    `✅ ${removedLines} chaotische Zeilen entfernt!`
+                );
+                
+                ErrorHandler.log('Extension', `Cleanup erfolgreich: ${removedLines} Zeilen entfernt`, 'success');
+            } else {
+                vscode.window.showInformationMessage('✅ Keine chaotischen Kommentare gefunden!');
+            }
+            
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`❌ Bereinigung fehlgeschlagen: ${error.message}`);
+            ErrorHandler.handleError('cleanupComments', error);
+        }
+    });
 }
 
 export function deactivate() {

@@ -55,8 +55,8 @@ export class ConfigManager {
             throw new Error('SecretStorage nicht initialisiert');
         }
 
+        // Speichere nur im SecretStorage, NICHT in normalen Settings
         await ConfigManager.secretStorage.store(key, value);
-        await ConfigManager.set(key, '', vscode.ConfigurationTarget.Global);
     }
 
     static async deleteSecret(key: string): Promise<void> {
@@ -70,11 +70,20 @@ export class ConfigManager {
         const keysToMigrate = ['openAIApiKey', 'azureApiKey'];
 
         for (const key of keysToMigrate) {
+            // Prüfe ob der Key bereits im SecretStorage ist
+            const existingSecret = await ConfigManager.getSecret(key).catch(() => null);
+            if (existingSecret) {
+                continue; // Bereits migriert
+            }
+            
+            // Versuche alte Config zu lesen (falls vorhanden)
             const oldValue = ConfigManager.get<string>(key);
             
-            if (oldValue && oldValue.trim().length > 0) {
+            if (oldValue && oldValue.trim().length > 0 && !oldValue.startsWith('sk-proj-')) {
                 try {
                     await ConfigManager.setSecret(key, oldValue);
+                    // Lösche alte Config (optional)
+                    await ConfigManager.set(key, undefined);
                 } catch (error) {
                     console.error(`Migration fehlgeschlagen für ${key}:`, error);
                 }

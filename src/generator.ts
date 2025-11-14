@@ -56,26 +56,31 @@ export class CommentGenerator {
             return DemoGPTEnhancer.enhanceComment(transcript, codeContext || '');
         }
         
-
-
         return new Promise((resolve, reject) => {
             const requestBody = JSON.stringify({
                 model: 'gpt-3.5-turbo',
                 messages: [
                     {
                         role: 'system',
-                        content: 'Du bist ein hilfreicher Assistent, der gesprochene Erklärungen in professionelle Code-Kommentare umwandelt. ' +
-                                'Formatiere den Text als klaren, präzisen Kommentar. Behalte technische Begriffe bei.'
+                        content: 'Du bist ein Assistent für Code-Dokumentation. ' +
+                                'Deine Aufgabe: Wandle gesprochene Erklärungen in KURZE, KLARE Kommentare um. ' +
+                                'WICHTIG: ' +
+                                '- NUR Text ausgeben, KEINE Code-Blöcke ' +
+                                '- KEINE ```javascript Blöcke ' +
+                                '- KEINE Markdown-Formatierung ' +
+                                '- Maximal 1-2 Sätze ' +
+                                '- Deutsch verwenden ' +
+                                '- Technische Begriffe beibehalten'
                     },
                     {
                         role: 'user',
                         content: codeContext 
-                            ? `Kontext:\n${codeContext}\n\nErklärung: "${transcript}"`
-                            : `Erklärung: "${transcript}"`
+                            ? `Kontext:\n${codeContext}\n\nErklärung: "${transcript}"\n\nAufgabe: Erstelle einen KURZEN Kommentar (1-2 Sätze, NUR Text, KEINE Code-Blöcke).`
+                            : `Erklärung: "${transcript}"\n\nAufgabe: Erstelle einen KURZEN Kommentar (1-2 Sätze, NUR Text, KEINE Code-Blöcke).`
                     }
                 ],
                 temperature: 0.3,
-                max_tokens: 150
+                max_tokens: 100 // Reduziert von 150 auf 100
             });
 
             const options = {
@@ -112,7 +117,11 @@ export class CommentGenerator {
                     try {
                         if (res.statusCode === 200) {
                             const response = JSON.parse(data);
-                            const enhancedText = response.choices?.[0]?.message?.content || transcript;
+                            let enhancedText = response.choices?.[0]?.message?.content || transcript;
+                            
+                            // ✨ NEU: Bereinige OpenAI Antwort
+                            enhancedText = this.cleanOpenAIResponse(enhancedText);
+                            
                             resolve(enhancedText.trim());
                         } else {
                             ErrorHandler.log(
@@ -153,6 +162,30 @@ export class CommentGenerator {
             req.write(requestBody);
             req.end();
         });
+    }
+
+    /**
+     * ✨ NEU: Bereinigt OpenAI Antwort von Code-Blöcken und Markdown
+     */
+    private cleanOpenAIResponse(text: string): string {
+        // Entferne ```javascript Blöcke
+        text = text.replace(/```javascript\s*([\s\S]*?)```/g, '$1');
+        text = text.replace(/```js\s*([\s\S]*?)```/g, '$1');
+        text = text.replace(/```\s*([\s\S]*?)```/g, '$1');
+        
+        // Entferne Markdown Bold/Italic
+        text = text.replace(/\*\*(.+?)\*\*/g, '$1');
+        text = text.replace(/\*(.+?)\*/g, '$1');
+        text = text.replace(/__(.+?)__/g, '$1');
+        text = text.replace(/_(.+?)_/g, '$1');
+        
+        // Entferne überflüssige Leerzeilen
+        text = text.replace(/\n{3,}/g, '\n\n');
+        
+        // Trim
+        text = text.trim();
+        
+        return text;
     }
 
     private cleanTranscript(transcript: string): string {

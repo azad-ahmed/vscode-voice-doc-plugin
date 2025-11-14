@@ -7,6 +7,7 @@ import { ErrorHandler } from './utils/errorHandler';
 import { ConfigManager } from './utils/configManager';
 import { ApiUsageTracker } from './utils/apiUsageTracker';
 import { AudioQualityValidator } from './utils/audioQualityValidator';
+import { SmartCommentPlacer } from './placement/smartCommentPlacer';
 
 /**
  * Verwaltet Audio-Aufnahme und Transkriptions-Workflow
@@ -223,30 +224,70 @@ export class IntegratedVoiceHandler {
 
         ErrorHandler.log('VoiceHandler', `Erkannter Text: "${text}"`);
 
-        const action = await vscode.window.showInformationMessage(
-            `🎙️ Erkannter Text:\n\n"${text}"\n\nWas möchtest du tun?`,
-            { modal: false },
-            'Einfügen',
-            'Mit KI verbessern',
-            'Bearbeiten',
-            'Abbrechen'
-        );
+        // ✨ NEU: Automatische Verarbeitung - KEINE Dialoge mehr!
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `🎯 Generiere Kommentar: "${text.substring(0, 30)}..."`,
+            cancellable: false
+        }, async () => {
+            try {
+                // ✨ IMMER mit KI verbessern (wenn verfügbar)
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) {
+                    vscode.window.showWarningMessage('Kein aktiver Editor gefunden.');
+                    return;
+                }
 
-        ErrorHandler.log('VoiceHandler', `Benutzer wählte: ${action || 'Abgebrochen'}`);
+                const codeContext = this.getCodeContext(editor);
+                let enhancedText = text;
 
-        switch (action) {
-            case 'Einfügen':
-                await this.insertComment(text);
-                break;
-            case 'Mit KI verbessern':
-                await this.enhanceAndInsertComment(text);
-                break;
-            case 'Bearbeiten':
-                await this.editAndInsertComment(text);
-                break;
-            default:
-                ErrorHandler.log('VoiceHandler', 'Benutzer hat abgebrochen');
-        }
+                // Versuche KI-Verbesserung
+                if (this.generator.isOpenAIAvailable()) {
+                    try {
+                        enhancedText = await ErrorHandler.retry(
+                            () => this.generator.enhanceWithOpenAI(text, codeContext),
+                            {
+                                maxRetries: 2,
+                                initialDelay: 1000,
+                                context: 'OpenAI Enhancement'
+                            }
+                        );
+                        ErrorHandler.log('VoiceHandler', `KI-Verbesserung erfolgreich: "${enhancedText}"`, 'success');
+                    } catch (error) {
+                        ErrorHandler.handleWarning('VoiceHandler', 'KI-Verbesserung fehlgeschlagen, verwende Original');
+                    }
+                }
+
+                // Formatiere als Kommentar
+                const comment = this.generator.formatComment(enhancedText, editor.document.languageId);
+                
+                // ✨ Verwende Smart Placement für korrekte Positionierung
+                const success = await SmartCommentPlacer.insertCommentAtOptimalPosition(
+                    editor,
+                    comment,
+                    editor.selection.active
+                );
+
+                if (success) {
+                    vscode.window.showInformationMessage(
+                        `✅ Kommentar automatisch eingefügt!`
+                    );
+                    ErrorHandler.log('VoiceHandler', `Kommentar erfolgreich eingefügt: "${comment}"`, 'success');
+                } else {
+                    // Fallback: An aktueller Position einfügen
+                    await this.insertCommentAtPosition(editor, comment);
+                    vscode.window.showInformationMessage(
+                        `✅ Kommentar an aktueller Position eingefügt`
+                    );
+                }
+
+            } catch (error) {
+                ErrorHandler.handleError('processTranscribedText', error);
+                vscode.window.showErrorMessage(
+                    `❌ Fehler beim Generieren: ${error instanceof Error ? error.message : 'Unbekannt'}`
+                );
+            }
+        });
     }
 
     public async processVoiceInput(text: string): Promise<string> {
@@ -265,73 +306,29 @@ export class IntegratedVoiceHandler {
         }
     }
 
-    private async insertComment(text: string): Promise<void> {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
-
-        try {
-            const comment = await this.processVoiceInput(text);
-            await this.insertCommentAtPosition(editor, comment);
-            vscode.window.showInformationMessage('✅ Kommentar eingefügt!');
-            ErrorHandler.log('VoiceHandler', `Kommentar eingefügt: "${comment}"`, 'success');
-        } catch (error) {
-            ErrorHandler.handleError('insertComment', error);
-        }
-    }
-
-    private async enhanceAndInsertComment(text: string): Promise<void> {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
-
-        try {
-            const codeContext = this.getCodeContext(editor);
-            
-            const enhancedText = await ErrorHandler.retry(
-                () => this.generator.enhanceWithOpenAI(text, codeContext),
-                {
-                    maxRetries: 2,
-                    initialDelay: 1000,
-                    context: 'OpenAI Enhancement'
-                }
-            );
-            
-            const comment = this.generator.formatComment(enhancedText, editor.document.languageId);
-            
-            await this.insertCommentAtPosition(editor, comment);
-            vscode.window.showInformationMessage('✅ KI-verbesserter Kommentar eingefügt!');
-            ErrorHandler.log('VoiceHandler', `KI-Kommentar: "${comment}"`, 'success');
-        } catch (error) {
-            ErrorHandler.handleWarning('VoiceHandler', 'KI-Verbesserung fehlgeschlagen, verwende Original');
-            await this.insertComment(text);
-        }
-    }
-
-    private async editAndInsertComment(text: string): Promise<void> {
-        const editedText = await vscode.window.showInputBox({
-            prompt: 'Kommentar bearbeiten',
-            value: text,
-            validateInput: (value) => {
-                return value.trim().length === 0 ? 'Darf nicht leer sein' : null;
-            }
-        });
-
-        if (editedText) {
-            await this.insertComment(editedText);
-        }
-    }
-
     private async insertCommentAtPosition(editor: vscode.TextEditor, comment: string): Promise<void> {
         const position = editor.selection.active;
-        const line = editor.document.lineAt(position.line);
-        const indentation = line.firstNonWhitespaceCharacterIndex;
-        const indent = ' '.repeat(Math.max(0, indentation));
         
-        await editor.edit(editBuilder => {
-            editBuilder.insert(
-                new vscode.Position(position.line, 0),
-                indent + comment + '\n'
-            );
-        });
+        // ✨ NEU: Verwende SmartCommentPlacer für korrekte Positionierung
+        const success = await SmartCommentPlacer.insertCommentAtOptimalPosition(
+            editor,
+            comment,
+            position
+        );
+        
+        if (!success) {
+            // Fallback: Füge an aktueller Position ein (alte Methode)
+            const line = editor.document.lineAt(position.line);
+            const indentation = line.firstNonWhitespaceCharacterIndex;
+            const indent = ' '.repeat(Math.max(0, indentation));
+            
+            await editor.edit(editBuilder => {
+                editBuilder.insert(
+                    new vscode.Position(position.line, 0),
+                    indent + comment + '\n'
+                );
+            });
+        }
     }
 
     private getCodeContext(editor: vscode.TextEditor): string {
