@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CommentPlacement } from './claudeAnalyzer';
 import { ErrorHandler } from '../utils/errorHandler';
+import { PositionValidator } from './positionValidator';
 
 /**
  * Präziser Kommentar-Inserter - platziert Kommentare exakt nach Claude's Anweisungen
@@ -21,28 +22,34 @@ export class PreciseCommentInserter {
         placement: CommentPlacement
     ): Promise<boolean> {
         try {
-            ErrorHandler.log('PreciseInserter', `Platziere Kommentar an Zeile ${placement.targetLine} (${placement.position})`);
-            ErrorHandler.log('PreciseInserter', `Grund: ${placement.reasoning}`);
+            // 🔒 KRITISCH: Validiere und korrigiere Position VOR dem Einfügen!
+            const validatedPlacement = PositionValidator.validateAndCorrect(
+                editor.document,
+                placement
+            );
+            
+            ErrorHandler.log('PreciseInserter', `Platziere Kommentar an Zeile ${validatedPlacement.targetLine} (${validatedPlacement.position})`);
+            ErrorHandler.log('PreciseInserter', `Grund: ${validatedPlacement.reasoning}`);
 
             const document = editor.document;
             
             // Validiere Zeilennummer
-            if (placement.targetLine < 0 || placement.targetLine >= document.lineCount) {
-                ErrorHandler.log('PreciseInserter', `⚠️ Ungültige Zeile ${placement.targetLine}, nutze aktuelle Position`);
-                placement.targetLine = editor.selection.active.line;
+            if (validatedPlacement.targetLine < 0 || validatedPlacement.targetLine >= document.lineCount) {
+                ErrorHandler.log('PreciseInserter', `⚠️ Ungültige Zeile ${validatedPlacement.targetLine}, nutze aktuelle Position`);
+                validatedPlacement.targetLine = editor.selection.active.line;
             }
 
             // Bestimme exakte Insert-Position
             const insertPosition = this.calculateInsertPosition(
                 document,
-                placement.targetLine,
-                placement.position
+                validatedPlacement.targetLine,
+                validatedPlacement.position
             );
 
             // Bereite Kommentar mit korrekter Einrückung vor
             const formattedComment = this.formatCommentWithIndentation(
-                placement.comment,
-                placement.indentation
+                validatedPlacement.comment,
+                validatedPlacement.indentation
             );
 
             // Füge Kommentar ein
@@ -55,7 +62,7 @@ export class PreciseCommentInserter {
                 
                 // Zeige Info-Message mit Reasoning
                 vscode.window.showInformationMessage(
-                    `✅ Kommentar eingefügt!\n📍 ${placement.reasoning}`
+                    `✅ Kommentar eingefügt!\n📍 ${validatedPlacement.reasoning}`
                 );
             } else {
                 ErrorHandler.handleError('PreciseInserter', new Error('Einfügen fehlgeschlagen'), false);

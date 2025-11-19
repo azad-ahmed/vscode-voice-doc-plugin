@@ -2,7 +2,7 @@
   "name": "vscode-voice-doc-plugin",
   "displayName": "Voice Documentation Plugin",
   "description": "KI-gestützte Code-Dokumentation per Spracheingabe - Diplomarbeit Projekt",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "azad-ahmed",
   "engines": {
     "vscode": "^1.70.0"
@@ -25,7 +25,8 @@
     "learning",
     "code-analysis",
     "ast-parser",
-    "intelligent-placement"
+    "intelligent-placement",
+    "security-hardened"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -37,16 +38,6 @@
         "command": "voiceDocPlugin.toggleRecording",
         "title": "Voice Doc: Aufnahme starten/stoppen",
         "icon": "$(mic)"
-      },
-      {
-        "command": "voiceDocPlugin.startRecording",
-        "title": "Voice Doc: Aufnahme starten",
-        "icon": "$(record)"
-      },
-      {
-        "command": "voiceDocPlugin.stopRecording",
-        "title": "Voice Doc: Aufnahme stoppen",
-        "icon": "$(stop)"
       },
       {
         "command": "voiceDocPlugin.convertToComment",
@@ -67,16 +58,6 @@
         "command": "voiceDocPlugin.configureAzure",
         "title": "Voice Doc: Azure konfigurieren",
         "icon": "$(cloud)"
-      },
-      {
-        "command": "voiceDocPlugin.testSTTProviders",
-        "title": "Voice Doc: STT-Provider testen",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "voiceDocPlugin.enableDemoMode",
-        "title": "Voice Doc: Demo-Modus aktivieren",
-        "icon": "$(debug-start)"
       },
       {
         "command": "voiceDocPlugin.showUsageStats",
@@ -129,21 +110,6 @@
         "icon": "$(search)"
       },
       {
-        "command": "voiceDocPlugin.test",
-        "title": "Voice Doc: Test-Befehle ausführen",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "voiceDocPlugin.cleanupComments",
-        "title": "Voice Doc: Chaotische Kommentare bereinigen",
-        "icon": "$(sparkle)"
-      },
-      {
-        "command": "voiceDocPlugin.resetOnboarding",
-        "title": "Voice Doc: Onboarding zurücksetzen",
-        "icon": "$(refresh)"
-      },
-      {
         "command": "voiceDocPlugin.analyzeCommentPlacement",
         "title": "Voice Doc: Kommentar-Platzierung analysieren (Claude AI)",
         "icon": "$(search)"
@@ -152,11 +118,6 @@
         "command": "voiceDocPlugin.analyzeCodeStructure",
         "title": "Voice Doc: Code-Struktur analysieren (AST)",
         "icon": "$(symbol-structure)"
-      },
-      {
-        "command": "voiceDocPlugin.testIntelligentPlacement",
-        "title": "Voice Doc: Intelligente Platzierung testen",
-        "icon": "$(target)"
       }
     ],
     "keybindings": [
@@ -217,11 +178,6 @@
         {
           "command": "voiceDocPlugin.analyzeCodeStructure",
           "group": "voiceDoc@4",
-          "when": "editorTextFocus"
-        },
-        {
-          "command": "voiceDocPlugin.testIntelligentPlacement",
-          "group": "voiceDoc@5",
           "when": "editorTextFocus"
         }
       ]
@@ -330,7 +286,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node ./out/test/runTest.js",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "security-audit": "npm audit && npm outdated"
   },
   "dependencies": {
     "@azure/core-auth": "^1.5.0",
@@ -343,16 +300,17 @@
   "devDependencies": {
     "@types/form-data": "^2.2.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "16.x",
+    "@types/node": "^20.x",
     "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.70.0",
-    "@typescript-eslint/eslint-plugin": "^5.31.0",
-    "@typescript-eslint/parser": "^5.31.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "@vscode/test-electron": "^2.3.0",
-    "eslint": "^8.20.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-security": "^3.0.1",
     "mocha": "^10.8.2",
     "sinon": "^21.0.0",
-    "typescript": "^4.7.4"
+    "typescript": "^5.7.2"
   },
   "repository": {
     "type": "git",

@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
  */
 export class ConfigManager {
     private static cache: Map<string, any> = new Map();
+    private static readonly MAX_CACHE_SIZE = 50;
     private static secretStorage: vscode.SecretStorage | null = null;
 
     static initialize(context: vscode.ExtensionContext): void {
@@ -30,6 +31,13 @@ export class ConfigManager {
         const value = config.get<T>(key, defaultValue as T);
 
         ConfigManager.cache.set(fullKey, value);
+        
+        // 🔒 Verhindere Memory Leak: LRU Cache-Limit
+        if (ConfigManager.cache.size > ConfigManager.MAX_CACHE_SIZE) {
+            const firstKey = ConfigManager.cache.keys().next().value;
+            ConfigManager.cache.delete(firstKey);
+        }
+        
         return value;
     }
 
@@ -70,25 +78,51 @@ export class ConfigManager {
         const keysToMigrate = ['openAIApiKey', 'azureApiKey'];
 
         for (const key of keysToMigrate) {
-            // Prüfe ob der Key bereits im SecretStorage ist
-            const existingSecret = await ConfigManager.getSecret(key).catch(() => null);
-            if (existingSecret) {
-                continue; // Bereits migriert
-            }
-            
-            // Versuche alte Config zu lesen (falls vorhanden)
-            const oldValue = ConfigManager.get<string>(key);
-            
-            if (oldValue && oldValue.trim().length > 0 && !oldValue.startsWith('sk-proj-')) {
-                try {
-                    await ConfigManager.setSecret(key, oldValue);
-                    // Lösche alte Config (optional)
-                    await ConfigManager.set(key, undefined);
-                } catch (error) {
-                    console.error(`Migration fehlgeschlagen für ${key}:`, error);
+            try {
+                // Prüfe ob der Key bereits im SecretStorage ist
+                const existingSecret = await ConfigManager.getSecret(key).catch(() => null);
+                if (existingSecret) {
+                    continue; // Bereits migriert
                 }
+                
+                // Versuche alte Config zu lesen (falls vorhanden)
+                const oldValue = ConfigManager.get<string>(key);
+                
+                // 🔒 SICHERHEIT: Validiere API Key Format
+                if (oldValue && ConfigManager.isValidApiKey(oldValue)) {
+                    // 1. Speichere im SecretStorage
+                    await ConfigManager.setSecret(key, oldValue);
+                    
+                    // 2. 🔒 VERIFIZIERE dass es gespeichert wurde
+                    const verifySecret = await ConfigManager.getSecret(key);
+                    
+                    // 3. NUR wenn erfolgreich → lösche alte Config
+                    if (verifySecret === oldValue) {
+                        await ConfigManager.set(key, undefined);
+                        console.log(`✅ ${key} erfolgreich migriert und verifiziert`);
+                    } else {
+                        console.error(`❌ Migration fehlgeschlagen für ${key}: Verifikation schlug fehl`);
+                    }
+                }
+            } catch (error) {
+                console.error(`❌ Migration fehlgeschlagen für ${key}:`, error);
             }
         }
+    }
+
+    /**
+     * 🔒 Validiert API Key Format
+     */
+    private static isValidApiKey(key: string): boolean {
+        if (!key || key.trim().length === 0) return false;
+        
+        // OpenAI Keys: sk-... (mindestens 40 Zeichen)
+        if (key.startsWith('sk-') && key.length >= 40) return true;
+        
+        // Azure Keys: 32 Zeichen Hex
+        if (/^[a-f0-9]{32}$/i.test(key)) return true;
+        
+        return false;
     }
 
     static clearCache(): void {

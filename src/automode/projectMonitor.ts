@@ -11,11 +11,34 @@ export class ProjectMonitor {
     private analysisQueue: Map<string, NodeJS.Timeout> = new Map();
     private processedFunctions: Set<string> = new Set();
     
+    // 🔒 Lock-System um mehrfache Analysen zu verhindern
+    private runningAnalyses: Set<string> = new Set();
+    private analysisLock: boolean = false;
+    private activeNotifications: Set<string> = new Set(); // Verhindert duplicate Notifications
+    
     constructor(
         private codeAnalyzer: CodeAnalyzer,
         private learningSystem: LearningSystem,
         private context: vscode.ExtensionContext
     ) {}
+
+    /**
+     * Prüft ob Zeile eine Funktions/Klassen-Definition ist
+     */
+    private isFunctionOrClassStart(line: string, languageId: string): boolean {
+        if (languageId === 'javascript' || languageId === 'typescript') {
+            return (
+                /^\s*(?:export\s+)?(?:async\s+)?function\s+\w+/.test(line) ||
+                /^\s*(?:export\s+)?(?:abstract\s+)?class\s+\w+/.test(line) ||
+                /^\s*(?:async\s+)?\w+\s*\([^)]*\)\s*\{/.test(line) ||
+                /^\s*(?:const|let|var)\s+\w+\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/.test(line)
+            );
+        }
+        if (languageId === 'python') {
+            return /^\s*(?:async\s+)?def\s+\w+\s*\(/.test(line) || /^\s*class\s+\w+/.test(line);
+        }
+        return false;
+    }
 
     /**
      * Startet die Projekt-Überwachung
@@ -127,14 +150,28 @@ export class ProjectMonitor {
      * Scannt alle aktuell geöffneten Dokumente
      */
     private async scanAllOpenDocuments(): Promise<void> {
-        const documents = vscode.workspace.textDocuments;
+        // 🔒 Verhindere parallele Initial-Scans
+        if (this.analysisLock) {
+            console.log('⏭️ Initial-Scan läuft bereits, überspringe...');
+            return;
+        }
         
-        console.log(`📊 Scanne ${documents.length} offene Dokumente...`);
+        this.analysisLock = true;
         
-        for (const document of documents) {
-            if (this.isCodeFile(document)) {
-                await this.analyzeDocument(document);
+        try {
+            const documents = vscode.workspace.textDocuments;
+            
+            console.log(`📊 Scanne ${documents.length} offene Dokumente...`);
+            
+            for (const document of documents) {
+                if (this.isCodeFile(document)) {
+                    await this.analyzeDocument(document);
+                    // Kurze Pause zwischen Dokumenten um System nicht zu überlasten
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
             }
+        } finally {
+            this.analysisLock = false;
         }
     }
 
@@ -172,7 +209,7 @@ export class ProjectMonitor {
             } finally {
                 this.analysisQueue.delete(key);
             }
-        }, 2000); // 2 Sekunden Debounce
+        }, 3000); // 3 Sekunden Debounce (erhöht für bessere Stabilität)
 
         this.analysisQueue.set(key, timeout);
     }
@@ -181,9 +218,21 @@ export class ProjectMonitor {
      * Analysiert ein komplettes Dokument und findet undokumentierte Klassen/Funktionen
      */
     private async analyzeDocument(document: vscode.TextDocument): Promise<void> {
-        console.log(`🔎 Analysiere Dokument: ${document.fileName}`);
+        const docKey = document.uri.toString();
         
-        const text = document.getText();
+        // 🔒 Prüfe ob bereits eine Analyse läuft für dieses Dokument
+        if (this.runningAnalyses.has(docKey)) {
+            console.log(`⏭️ Überspringe ${document.fileName} - Analyse läuft bereits`);
+            return;
+        }
+        
+        // 🔒 Markiere als laufend
+        this.runningAnalyses.add(docKey);
+        
+        try {
+            console.log(`🔎 Analysiere Dokument: ${document.fileName}`);
+            
+            const text = document.getText();
         const languageId = document.languageId;
 
         // Finde alle Klassen
@@ -212,6 +261,11 @@ export class ProjectMonitor {
             // Analysiere und dokumentiere
             await this.autoDocumentItem(document, item);
             this.processedFunctions.add(itemKey);
+        }
+        
+        } finally {
+            // 🔓 Lock freigeben
+            this.runningAnalyses.delete(docKey);
         }
     }
 
@@ -410,6 +464,17 @@ export class ProjectMonitor {
         document: vscode.TextDocument,
         item: {name: string; line: number; type: 'class' | 'function'}
     ): Promise<void> {
+        const notificationKey = `${document.uri.toString()}:${item.name}:${item.line}`;
+        
+        // 🔒 Prüfe ob bereits eine Notification für dieses Item aktiv ist
+        if (this.activeNotifications.has(notificationKey)) {
+            console.log(`⏭️ Überspringe Notification für ${item.name} - bereits aktiv`);
+            return;
+        }
+        
+        // Markiere als aktiv
+        this.activeNotifications.add(notificationKey);
+        
         try {
             // Erstelle Code-Kontext
             const codeContext = this.createCodeContext(document, item);
@@ -441,6 +506,9 @@ export class ProjectMonitor {
 
         } catch (error) {
             console.error(`Fehler beim Auto-Dokumentieren von ${item.name}:`, error);
+        } finally {
+            // 🔓 Notification-Lock freigeben
+            this.activeNotifications.delete(notificationKey);
         }
     }
 
@@ -481,8 +549,27 @@ export class ProjectMonitor {
         // Öffne das Dokument in einem Editor
         const editor = await vscode.window.showTextDocument(document, { preview: false });
         
+        // 🔒 Validiere Position (prüfe ob wir wirklich VOR der Funktion einfügen)
+        const targetLine = document.lineAt(line);
+        const targetText = targetLine.text.trim();
+        
+        // Wenn Zeile eine Funktionsdefinition ist, muss Kommentar DAVOR
+        let insertLine = line;
+        if (this.isFunctionOrClassStart(targetText, document.languageId)) {
+            // Gut - einfügen davor
+        } else {
+            // Suche nach Funktionsbeginn
+            for (let i = line; i < Math.min(line + 5, document.lineCount); i++) {
+                const checkLine = document.lineAt(i).text.trim();
+                if (this.isFunctionOrClassStart(checkLine, document.languageId)) {
+                    insertLine = i;
+                    break;
+                }
+            }
+        }
+        
         await editor.edit(editBuilder => {
-            const insertPos = new vscode.Position(line, 0);
+            const insertPos = new vscode.Position(insertLine, 0);
             editBuilder.insert(insertPos, comment + '\n');
         });
 
@@ -523,8 +610,23 @@ export class ProjectMonitor {
             
             const editor = await vscode.window.showTextDocument(document, { preview: false });
             
+            // 🔒 Validiere Position
+            let insertLine = line;
+            const targetLine = document.lineAt(line);
+            const targetText = targetLine.text.trim();
+            
+            if (!this.isFunctionOrClassStart(targetText, document.languageId)) {
+                for (let i = line; i < Math.min(line + 5, document.lineCount); i++) {
+                    const checkLine = document.lineAt(i).text.trim();
+                    if (this.isFunctionOrClassStart(checkLine, document.languageId)) {
+                        insertLine = i;
+                        break;
+                    }
+                }
+            }
+            
             await editor.edit(editBuilder => {
-                const insertPos = new vscode.Position(line, 0);
+                const insertPos = new vscode.Position(insertLine, 0);
                 editBuilder.insert(insertPos, comment + '\n');
             });
 
@@ -619,5 +721,8 @@ export class ProjectMonitor {
      */
     dispose(): void {
         this.stop();
+        this.runningAnalyses.clear();
+        this.processedFunctions.clear();
+        this.activeNotifications.clear();
     }
 }

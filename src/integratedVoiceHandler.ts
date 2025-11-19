@@ -7,10 +7,10 @@ import { ErrorHandler } from './utils/errorHandler';
 import { ConfigManager } from './utils/configManager';
 import { ApiUsageTracker } from './utils/apiUsageTracker';
 import { AudioQualityValidator } from './utils/audioQualityValidator';
-import { SmartCommentPlacer } from './placement/smartCommentPlacer';
-import { IntelligentCommentOrchestrator } from './intelligent-placement/orchestrator';
 // ✨ NEU: AST-basierte intelligente Platzierung
 import { IntelligentCommentPlacer } from './placement/intelligentPlacer';
+// ✨ NEU: Hybrid Intelligence Manager für intelligente Platzierung
+import { HybridIntelligenceManager } from './offline-intelligence/hybridManager';
 
 /**
  * Verwaltet Audio-Aufnahme und Transkriptions-Workflow
@@ -171,29 +171,34 @@ export class IntegratedVoiceHandler {
                 title: 'Transkribiere Aufnahme...',
                 cancellable: false
             }, async (progress) => {
-                const language = ConfigManager.get<string>('language', 'de-DE');
-                
-                const startTime = Date.now();
-                
-                const transcribedText = await ErrorHandler.retry(
-                    () => this.sttProvider!.transcribe(audioPath, language),
-                    {
-                        maxRetries: 2,
-                        initialDelay: 1000,
-                        context: 'STT Transcription'
-                    }
-                );
-                
-                const duration = Date.now() - startTime;
-                const durationSeconds = validation.duration ? validation.duration / 1000 : 0;
+                try {
+                    const language = ConfigManager.get<string>('language', 'de-DE');
+                    
+                    const startTime = Date.now();
+                    
+                    const transcribedText = await ErrorHandler.retry(
+                        () => this.sttProvider!.transcribe(audioPath, language),
+                        {
+                            maxRetries: 2,
+                            initialDelay: 1000,
+                            context: 'STT Transcription'
+                        }
+                    );
+                    
+                    const duration = Date.now() - startTime;
+                    const durationSeconds = validation.duration ? validation.duration / 1000 : 0;
 
-                ErrorHandler.log('VoiceHandler', `Transkription erfolgreich in ${duration}ms`, 'success');
-                ErrorHandler.log('VoiceHandler', `Text: "${transcribedText}"`);
+                    ErrorHandler.log('VoiceHandler', `Transkription erfolgreich in ${duration}ms`, 'success');
+                    ErrorHandler.log('VoiceHandler', `Text: "${transcribedText}"`);
 
-                const provider = this.sttProvider!.name.includes('OpenAI') ? 'openai' : 'azure';
-                await ApiUsageTracker.trackTranscription(provider, durationSeconds, true);
+                    const provider = this.sttProvider!.name.includes('OpenAI') ? 'openai' : 'azure';
+                    await ApiUsageTracker.trackTranscription(provider, durationSeconds, true);
 
-                return transcribedText;
+                    return transcribedText;
+                } catch (error) {
+                    ErrorHandler.handleError('VoiceHandler.transcribe', error, false);
+                    throw error; // Re-throw für äußere catch-Block
+                }
             });
 
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -202,13 +207,23 @@ export class IntegratedVoiceHandler {
         } catch (error: any) {
             ErrorHandler.handleError('transcribeAndProcess', error);
             
-            const retry = await vscode.window.showErrorMessage(
-                `Transkription fehlgeschlagen: ${error.message}`,
-                'Erneut versuchen',
-                'Text manuell eingeben',
-                'Abbrechen'
-            );
+            // 🔒 Verhindere Promise Rejection ohne Handling
+            return this.handleTranscriptionError(error, audioPath);
+        }
+    }
 
+    /**
+     * 🔒 Behandelt Transkriptionsfehler mit User-Feedback
+     */
+    private async handleTranscriptionError(error: any, audioPath: string): Promise<void> {
+        const retry = await vscode.window.showErrorMessage(
+            `Transkription fehlgeschlagen: ${error.message}`,
+            'Erneut versuchen',
+            'Text manuell eingeben',
+            'Abbrechen'
+        );
+
+        try {
             if (retry === 'Erneut versuchen') {
                 await this.transcribeAndProcess(audioPath);
             } else if (retry === 'Text manuell eingeben') {
@@ -221,6 +236,9 @@ export class IntegratedVoiceHandler {
                     await this.processTranscribedText(manualText);
                 }
             }
+        } catch (retryError) {
+            ErrorHandler.handleError('VoiceHandler.handleTranscriptionError', retryError);
+            vscode.window.showErrorMessage('❌ Wiederholung fehlgeschlagen');
         }
     }
 
@@ -296,18 +314,18 @@ export class IntegratedVoiceHandler {
             }
         }
 
-        // Fallback 1: Claude AI Platzierung
+        // Fallback 1: Hybrid Intelligence Manager (Claude AI + AST)
         try {
-            const success = await IntelligentCommentOrchestrator.processVoiceInputAndPlace(
+            const success = await HybridIntelligenceManager.processAndPlace(
                 editor,
                 text
             );
 
             if (success) {
-                return; // Erfolg mit Claude AI!
+                return; // Erfolg mit Hybrid Manager!
             }
         } catch (error) {
-            ErrorHandler.log('VoiceHandler', '⚠️ Claude AI Platzierung fehlgeschlagen, nutze finalen Fallback');
+            ErrorHandler.log('VoiceHandler', '⚠️ Hybrid Platzierung fehlgeschlagen, nutze finalen Fallback');
         }
 
         // Fallback 2: Einfache Platzierung
@@ -347,24 +365,13 @@ export class IntegratedVoiceHandler {
                 // Formatiere als Kommentar
                 const comment = this.generator.formatComment(enhancedText, editor.document.languageId);
                 
-                // Verwende Smart Placement
-                const success = await SmartCommentPlacer.insertCommentAtOptimalPosition(
-                    editor,
-                    comment,
-                    editor.selection.active
+                // Einfache Platzierung an Cursor-Position
+                await this.insertCommentAtPosition(editor, comment);
+                
+                vscode.window.showInformationMessage(
+                    `✅ Kommentar eingefügt`
                 );
-
-                if (success) {
-                    vscode.window.showInformationMessage(
-                        `✅ Kommentar eingefügt`
-                    );
-                    ErrorHandler.log('VoiceHandler', `Kommentar erfolgreich eingefügt: "${comment}"`, 'success');
-                } else {
-                    await this.insertCommentAtPosition(editor, comment);
-                    vscode.window.showInformationMessage(
-                        `✅ Kommentar an aktueller Position eingefügt`
-                    );
-                }
+                ErrorHandler.log('VoiceHandler', `Kommentar erfolgreich eingefügt: "${comment}"`, 'success');
 
             } catch (error) {
                 ErrorHandler.handleError('processWithFallback', error);
@@ -394,25 +401,17 @@ export class IntegratedVoiceHandler {
     private async insertCommentAtPosition(editor: vscode.TextEditor, comment: string): Promise<void> {
         const position = editor.selection.active;
         
-        const success = await SmartCommentPlacer.insertCommentAtOptimalPosition(
-            editor,
-            comment,
-            position
-        );
+        // Einfache Platzierung: Füge an aktueller Position mit korrekter Einrückung ein
+        const line = editor.document.lineAt(position.line);
+        const indentation = line.firstNonWhitespaceCharacterIndex;
+        const indent = ' '.repeat(Math.max(0, indentation));
         
-        if (!success) {
-            // Fallback: Füge an aktueller Position ein
-            const line = editor.document.lineAt(position.line);
-            const indentation = line.firstNonWhitespaceCharacterIndex;
-            const indent = ' '.repeat(Math.max(0, indentation));
-            
-            await editor.edit(editBuilder => {
-                editBuilder.insert(
-                    new vscode.Position(position.line, 0),
-                    indent + comment + '\n'
-                );
-            });
-        }
+        await editor.edit(editBuilder => {
+            editBuilder.insert(
+                new vscode.Position(position.line, 0),
+                indent + comment + '\n'
+            );
+        });
     }
 
     private getCodeContext(editor: vscode.TextEditor): string {

@@ -3,15 +3,50 @@ import * as https from 'https';
 import { ConfigManager } from './utils/configManager';
 import { ErrorHandler } from './utils/errorHandler';
 import { DemoGPTEnhancer } from './utils/demoGPTEnhancer';
+import { RateLimiter } from './utils/rateLimiter';
 
+/**
+ * 🔒 Configuration Constants
+ */
+const API_CONFIG = {
+    OPENAI: {
+        MAX_TOKENS: {
+            COMMENT: 100,
+            ANALYSIS: 500,
+            DOCUMENTATION: 1000
+        },
+        TEMPERATURE: 0.3,
+        MODEL: 'gpt-3.5-turbo'
+    },
+    RATE_LIMIT: {
+        MAX_CALLS_PER_MINUTE: 20,
+        WINDOW_MS: 60000
+    },
+    TIMEOUT: {
+        REQUEST_MS: 30000,
+        CLEANUP_MS: 2000
+    },
+    VALIDATION: {
+        MIN_TEXT_LENGTH: 1,
+        MAX_TEXT_LENGTH: 10000,
+        MAX_COMMENT_LENGTH: 1000
+    }
+} as const;
 
 export class CommentGenerator {
     private language: string;
     private openAIApiKey?: string;
-    private requestTimeout: number = 30000;
+    private requestTimeout: number = API_CONFIG.TIMEOUT.REQUEST_MS;
+    
+    // 🔒 Rate Limiter
+    private rateLimiter: RateLimiter;
 
     constructor(language: string = 'auto') {
         this.language = language;
+        this.rateLimiter = new RateLimiter(
+            API_CONFIG.RATE_LIMIT.MAX_CALLS_PER_MINUTE,
+            API_CONFIG.RATE_LIMIT.WINDOW_MS
+        );
         this.loadConfiguration();
     }
 
@@ -50,15 +85,28 @@ export class CommentGenerator {
     }
 
     public async enhanceWithOpenAI(transcript: string, codeContext: string | null): Promise<string> {
-        // ✨ Verwende Demo-GPT-Enhancer wenn kein API-Key vorhanden
+        // 🔒 Verwende Demo-GPT-Enhancer wenn kein API-Key vorhanden
         if (!this.openAIApiKey) {
             ErrorHandler.log('CommentGenerator', 'Nutze Demo-GPT-Verbesserung');
             return DemoGPTEnhancer.enhanceComment(transcript, codeContext || '');
         }
         
+        // 🔒 KRITISCH: Rate Limit Check
+        try {
+            await this.rateLimiter.checkLimit();
+        } catch (error: any) {
+            ErrorHandler.handleWarning('CommentGenerator', error.message, true);
+            // Fallback zu Demo-Enhancer
+            return DemoGPTEnhancer.enhanceComment(transcript, codeContext || '');
+        }
+        
+        // 🔒 Input Sanitization
+        const sanitizedTranscript = this.sanitizeInput(transcript);
+        const sanitizedContext = codeContext ? this.sanitizeInput(codeContext) : null;
+        
         return new Promise((resolve, reject) => {
             const requestBody = JSON.stringify({
-                model: 'gpt-3.5-turbo',
+                model: API_CONFIG.OPENAI.MODEL,
                 messages: [
                     {
                         role: 'system',
@@ -74,13 +122,13 @@ export class CommentGenerator {
                     },
                     {
                         role: 'user',
-                        content: codeContext 
-                            ? `Kontext:\n${codeContext}\n\nErklärung: "${transcript}"\n\nAufgabe: Erstelle einen KURZEN Kommentar (1-2 Sätze, NUR Text, KEINE Code-Blöcke).`
-                            : `Erklärung: "${transcript}"\n\nAufgabe: Erstelle einen KURZEN Kommentar (1-2 Sätze, NUR Text, KEINE Code-Blöcke).`
+                        content: sanitizedContext 
+                            ? `Kontext:\n${sanitizedContext}\n\nErklärung: "${sanitizedTranscript}"\n\nAufgabe: Erstelle einen KURZEN Kommentar (1-2 Sätze, NUR Text, KEINE Code-Blöcke).`
+                            : `Erklärung: "${sanitizedTranscript}"\n\nAufgabe: Erstelle einen KURZEN Kommentar (1-2 Sätze, NUR Text, KEINE Code-Blöcke).`
                     }
                 ],
-                temperature: 0.3,
-                max_tokens: 100 // Reduziert von 150 auf 100
+                temperature: API_CONFIG.OPENAI.TEMPERATURE,
+                max_tokens: API_CONFIG.OPENAI.MAX_TOKENS.COMMENT
             });
 
             const options = {
@@ -95,8 +143,32 @@ export class CommentGenerator {
                 timeout: this.requestTimeout
             };
 
+            // 🔒 Besseres Timeout-Handling
             let timeoutHandle: NodeJS.Timeout;
             let hasTimedOut = false;
+            let isResolved = false;
+
+            const cleanup = () => {
+                if (timeoutHandle) {
+                    clearTimeout(timeoutHandle);
+                }
+            };
+
+            const safeResolve = (value: string) => {
+                if (!isResolved) {
+                    isResolved = true;
+                    cleanup();
+                    resolve(value);
+                }
+            };
+
+            const safeReject = (error: Error) => {
+                if (!isResolved) {
+                    isResolved = true;
+                    cleanup();
+                    reject(error);
+                }
+            };
 
             const req = https.request(options, (res) => {
                 let data = '';
@@ -106,48 +178,48 @@ export class CommentGenerator {
                 });
 
                 res.on('end', () => {
-                    if (timeoutHandle) {
-                        clearTimeout(timeoutHandle);
-                    }
-
-                    if (hasTimedOut) {
+                    if (hasTimedOut || isResolved) {
                         return;
                     }
 
                     try {
                         if (res.statusCode === 200) {
                             const response = JSON.parse(data);
-                            let enhancedText = response.choices?.[0]?.message?.content || transcript;
+                            let enhancedText = response.choices?.[0]?.message?.content || sanitizedTranscript;
                             
-                            // ✨ NEU: Bereinige OpenAI Antwort
+                            // 🔒 Bereinige OpenAI Antwort
                             enhancedText = this.cleanOpenAIResponse(enhancedText);
                             
-                            resolve(enhancedText.trim());
+                            safeResolve(enhancedText.trim());
+                        } else if (res.statusCode === 429) {
+                            // Rate Limit von OpenAI
+                            ErrorHandler.log(
+                                'CommentGenerator',
+                                'OpenAI Rate Limit erreicht, nutze Fallback'
+                            );
+                            safeResolve(DemoGPTEnhancer.enhanceComment(sanitizedTranscript, sanitizedContext || ''));
                         } else {
                             ErrorHandler.log(
                                 'CommentGenerator',
                                 `OpenAI API Fehler: ${res.statusCode}`
                             );
-                            resolve(transcript);
+                            safeResolve(sanitizedTranscript);
                         }
                     } catch (error) {
-                        ErrorHandler.handleError('CommentGenerator', error, false);
-                        resolve(transcript);
+                        ErrorHandler.handleError('CommentGenerator.parseResponse', error, false);
+                        safeResolve(sanitizedTranscript);
                     }
                 });
             });
 
             req.on('error', (error) => {
-                if (timeoutHandle) {
-                    clearTimeout(timeoutHandle);
-                }
-                
-                if (!hasTimedOut) {
-                    ErrorHandler.handleError('CommentGenerator', error, false);
-                    resolve(transcript);
+                if (!hasTimedOut && !isResolved) {
+                    ErrorHandler.handleError('CommentGenerator.request', error, false);
+                    safeResolve(sanitizedTranscript);
                 }
             });
 
+            // 🔒 Timeout mit Cleanup
             timeoutHandle = setTimeout(() => {
                 hasTimedOut = true;
                 req.destroy();
@@ -156,7 +228,7 @@ export class CommentGenerator {
                     `OpenAI Request Timeout nach ${this.requestTimeout}ms`,
                     false
                 );
-                resolve(transcript);
+                safeResolve(sanitizedTranscript);
             }, this.requestTimeout);
 
             req.write(requestBody);
@@ -165,15 +237,43 @@ export class CommentGenerator {
     }
 
     /**
-     * ✨ NEU: Bereinigt OpenAI Antwort von Code-Blöcken und Markdown
+     * 🔒 KRITISCH: Input Sanitization
+     * Verhindert XSS, Code Injection und validiert Länge
+     */
+    private sanitizeInput(text: string): string {
+        if (!text) {
+            throw new Error('Input darf nicht leer sein');
+        }
+
+        // Längen-Validierung
+        if (text.length < API_CONFIG.VALIDATION.MIN_TEXT_LENGTH) {
+            throw new Error('Input zu kurz');
+        }
+        
+        if (text.length > API_CONFIG.VALIDATION.MAX_TEXT_LENGTH) {
+            throw new Error(`Input zu lang (max ${API_CONFIG.VALIDATION.MAX_TEXT_LENGTH} Zeichen)`);
+        }
+
+        return text
+            .trim()
+            // Entferne potentiell gefährliche Zeichen
+            .replace(/[<>]/g, '')
+            // Normalisiere Whitespace
+            .replace(/\s+/g, ' ')
+            // Begrenze finale Länge
+            .substring(0, API_CONFIG.VALIDATION.MAX_COMMENT_LENGTH);
+    }
+
+    /**
+     * 🔒 Bereinigt OpenAI Antwort von Code-Blöcken und Markdown
+     * ✅ VERBESSERT: Robustere Regex-Patterns, Längen-Limitierung
      */
     private cleanOpenAIResponse(text: string): string {
-        // Entferne ```javascript Blöcke
-        text = text.replace(/```javascript\s*([\s\S]*?)```/g, '$1');
-        text = text.replace(/```js\s*([\s\S]*?)```/g, '$1');
-        text = text.replace(/```\s*([\s\S]*?)```/g, '$1');
+        // Entferne ALLE Code-Blöcke (javascript, typescript, python, etc.)
+        // ✅ NEU: Case-insensitive und alle Sprachen
+        text = text.replace(/```[a-z]*\s*([\s\S]*?)```/gi, '$1');
         
-        // Entferne Markdown Bold/Italic
+        // Entferne Markdown Bold/Italic (non-greedy)
         text = text.replace(/\*\*(.+?)\*\*/g, '$1');
         text = text.replace(/\*(.+?)\*/g, '$1');
         text = text.replace(/__(.+?)__/g, '$1');
@@ -182,8 +282,13 @@ export class CommentGenerator {
         // Entferne überflüssige Leerzeilen
         text = text.replace(/\n{3,}/g, '\n\n');
         
-        // Trim
+        // 🔒 NEU: Entferne führende/trailing Whitespace
         text = text.trim();
+        
+        // 🔒 NEU: Begrenze auf maximale Länge (verhindert zu lange Kommentare)
+        if (text.length > API_CONFIG.VALIDATION.MAX_COMMENT_LENGTH) {
+            text = text.substring(0, API_CONFIG.VALIDATION.MAX_COMMENT_LENGTH - 3) + '...';
+        }
         
         return text;
     }
@@ -360,6 +465,8 @@ export class CommentGenerator {
     public async setOpenAIApiKey(apiKey: string): Promise<void> {
         await ConfigManager.setSecret('openAIApiKey', apiKey);
         this.openAIApiKey = apiKey;
+        // 🔒 SICHERHEIT: Logge NIEMALS den API Key
+        ErrorHandler.log('CommentGenerator', 'API Provider konfiguriert', 'success');
     }
 
     public isOpenAIAvailable(): boolean {
@@ -368,5 +475,19 @@ export class CommentGenerator {
 
     public setRequestTimeout(timeoutMs: number): void {
         this.requestTimeout = timeoutMs;
+    }
+
+    /**
+     * 🔒 Gibt Rate Limiter Statistik zurück
+     */
+    public getRateLimitStats() {
+        return this.rateLimiter.getUsageStats();
+    }
+
+    /**
+     * 🔒 Setzt Rate Limiter zurück
+     */
+    public resetRateLimit(): void {
+        this.rateLimiter.reset();
     }
 }

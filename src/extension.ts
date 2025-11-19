@@ -11,11 +11,10 @@ import { AutoCommentMonitor } from './utils/autoCommentMonitor';
 import { LearningSystem } from './learning/learningSystem';
 import { CodeAnalyzer } from './analysis/codeAnalyzer';
 import { AutoModeController } from './automode/autoModeController';
-import { SmartCommentPlacer } from './placement/smartCommentPlacer';
 // ✨ NEU: Onboarding Manager
 import { OnboardingManager } from './onboarding/onboardingManager';
-// ✨ NEU: Intelligente Kommentar-Platzierung
-import { IntelligentCommentOrchestrator } from './intelligent-placement/orchestrator';
+// ✨ NEU: Hybrid Intelligence Manager (ersetzt alte Orchestratoren)
+import { HybridIntelligenceManager } from './offline-intelligence/hybridManager';
 
 let statusBarItem: vscode.StatusBarItem;
 let autoCommentStatusBarItem: vscode.StatusBarItem;
@@ -1085,7 +1084,11 @@ async function analyzeCommentPlacement() {
         cancellable: false
     }, async () => {
         try {
-            await IntelligentCommentOrchestrator.analyzeOnly(editor, text);
+            // Verwende HybridIntelligenceManager statt IntelligentCommentOrchestrator
+            const success = await HybridIntelligenceManager.processAndPlace(editor, text);
+            if (!success) {
+                vscode.window.showWarningMessage('⚠️ Keine passende Position gefunden');
+            }
         } catch (error: any) {
             vscode.window.showErrorMessage(`❌ Analyse fehlgeschlagen: ${error.message}`);
         }

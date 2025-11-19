@@ -3,6 +3,7 @@ import { ASTCodeAnalyzer, CodeStructure } from './astAnalyzer';
 import { SmartCommentGenerator } from './smartCommentGenerator';
 import { ClaudeAnalyzer, CommentPlacement } from '../intelligent-placement/claudeAnalyzer';
 import { PreciseCommentInserter } from '../intelligent-placement/preciseInserter';
+import { PositionValidator } from '../intelligent-placement/positionValidator';
 import { ErrorHandler } from '../utils/errorHandler';
 import { ConfigManager } from '../utils/configManager';
 
@@ -52,8 +53,11 @@ export class HybridIntelligenceManager {
                 return false;
             }
 
+            // 🔒 Validiere Position (doppelte Absicherung)
+            const validatedPlacement = PositionValidator.validateAndCorrect(document, placement);
+
             // Validierung
-            const validation = await PreciseCommentInserter.validatePlacement(document, placement);
+            const validation = await PreciseCommentInserter.validatePlacement(document, validatedPlacement);
             
             if (!validation.isValid) {
                 const errors = validation.errors?.join('\n') || 'Unbekannt';
@@ -62,7 +66,7 @@ export class HybridIntelligenceManager {
             }
 
             // Einfügen
-            const success = await PreciseCommentInserter.insertComment(editor, placement);
+            const success = await PreciseCommentInserter.insertComment(editor, validatedPlacement);
 
             if (success) {
                 const modeEmoji = strategy === 'online' ? '🌐' : '💻';
@@ -244,13 +248,16 @@ export class HybridIntelligenceManager {
             comment = `/** ${comment} */`;
         }
 
-        return {
+        const fallbackPlacement: CommentPlacement = {
             comment,
             targetLine: position.line,
             position: 'before',
             indentation: line.firstNonWhitespaceCharacterIndex,
             reasoning: 'Fallback-Platzierung (AST-Analyse fehlgeschlagen)'
         };
+        
+        // 🔒 Validiere auch Fallback-Platzierung!
+        return PositionValidator.validateAndCorrect(document, fallbackPlacement);
     }
 
     /**

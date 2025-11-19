@@ -5,6 +5,7 @@ import { CommentGenerator } from '../generator';
 import { ErrorHandler } from './errorHandler';
 import { ConfigManager } from './configManager';
 import { LearningSystem } from '../learning/learningSystem';
+import { PositionValidator } from '../intelligent-placement/positionValidator';
 
 /**
  * Überwacht Code-Änderungen und generiert automatisch Kommentare
@@ -16,6 +17,10 @@ export class AutoCommentMonitor {
     private documentSaveListener?: vscode.Disposable;
     private pendingChanges: Map<string, NodeJS.Timeout> = new Map();
     private lastAnalyzedContent: Map<string, string> = new Map();
+    
+    // 🔒 Lock-Systeme um mehrfache Benachrichtigungen zu verhindern
+    private runningAnalyses: Set<string> = new Set();
+    private activeNotifications: Set<string> = new Set();
 
     constructor(
         generator: CommentGenerator,
@@ -37,7 +42,7 @@ export class AutoCommentMonitor {
             return;
         }
 
-        ErrorHandler.log('AutoCommentMonitor', 'Starte Code-Überwachung');
+        ErrorHandler.log('AutoCommentMonitor', '🚀 Starte Code-Überwachung (verbessert)');
 
         this.documentSaveListener = vscode.workspace.onDidSaveTextDocument(async (document) => {
             await this.onDocumentSaved(document);
@@ -108,7 +113,7 @@ export class AutoCommentMonitor {
         const timer = setTimeout(() => {
             this.analyzeAndComment(event.document, false);
             this.pendingChanges.delete(uri);
-        }, 2000);
+        }, 5000); // 5 Sekunden Debounce (erhöht für bessere Stabilität)
 
         this.pendingChanges.set(uri, timer);
     }
@@ -139,8 +144,19 @@ export class AutoCommentMonitor {
      */
     private async analyzeAndComment(document: vscode.TextDocument, showNotification: boolean): Promise<void> {
         const uri = document.uri.toString();
-        const currentContent = document.getText();
-        const lastContent = this.lastAnalyzedContent.get(uri);
+        
+        // 🔒 Prüfe ob bereits eine Analyse läuft
+        if (this.runningAnalyses.has(uri)) {
+            ErrorHandler.log('AutoCommentMonitor', `⏭️ Überspringe ${document.fileName} - Analyse läuft bereits`);
+            return;
+        }
+        
+        // 🔒 Markiere als laufend
+        this.runningAnalyses.add(uri);
+        
+        try {
+            const currentContent = document.getText();
+            const lastContent = this.lastAnalyzedContent.get(uri);
 
         if (lastContent === currentContent) {
             return;
@@ -175,18 +191,37 @@ export class AutoCommentMonitor {
         if (elementsToComment.length === 0) {
             return;
         }
+        
+        // 🔒 Prüfe ob bereits eine Notification aktiv ist
+        const notificationKey = `${uri}:batch`;
+        if (this.activeNotifications.has(notificationKey)) {
+            ErrorHandler.log('AutoCommentMonitor', '⏭️ Notification bereits aktiv, überspringe');
+            return;
+        }
+        
+        this.activeNotifications.add(notificationKey);
+        
+        try {
+            const action = await this.askUserForAction(elementsToComment.length);
 
-        const action = await this.askUserForAction(elementsToComment.length);
-
-        if (action === 'comment-all') {
-            await this.commentAllElements(document, elementsToComment);
-            if (showNotification) {
-                vscode.window.showInformationMessage(
-                    `✅ ${elementsToComment.length} Kommentare automatisch hinzugefügt`
-                );
+            if (action === 'comment-all') {
+                await this.commentAllElements(document, elementsToComment);
+                if (showNotification) {
+                    vscode.window.showInformationMessage(
+                        `✅ ${elementsToComment.length} Kommentare automatisch hinzugefügt`
+                    );
+                }
+            } else if (action === 'review') {
+                await this.reviewElements(document, elementsToComment);
             }
-        } else if (action === 'review') {
-            await this.reviewElements(document, elementsToComment);
+        } finally {
+            // 🔓 Notification-Lock freigeben
+            this.activeNotifications.delete(notificationKey);
+        }
+        
+        } finally {
+            // 🔓 Analyse-Lock freigeben
+            this.runningAnalyses.delete(uri);
         }
     }
 
@@ -435,10 +470,30 @@ export class AutoCommentMonitor {
         const indentation = line.firstNonWhitespaceCharacterIndex;
         const indent = ' '.repeat(Math.max(0, indentation));
 
+        // 🔒 Validiere Position mit PositionValidator
+        const mockPlacement = {
+            comment: comment,
+            targetLine: position.line,
+            position: 'before' as const,
+            indentation: indentation,
+            reasoning: 'Auto-Monitor Platzierung'
+        };
+        
+        const validated = PositionValidator.validateAndCorrect(
+            editor.document,
+            mockPlacement
+        );
+        
+        ErrorHandler.log(
+            'AutoCommentMonitor',
+            `Position validiert: Zeile ${validated.targetLine}, Einrückung ${validated.indentation}`,
+            'success'
+        );
+
         await editor.edit(editBuilder => {
             editBuilder.insert(
-                new vscode.Position(position.line, 0),
-                indent + comment + '\n'
+                new vscode.Position(validated.targetLine, 0),
+                ' '.repeat(validated.indentation) + validated.comment + '\n'
             );
         });
     }
@@ -460,6 +515,8 @@ export class AutoCommentMonitor {
     public dispose(): void {
         this.stop();
         this.lastAnalyzedContent.clear();
+        this.runningAnalyses.clear();
+        this.activeNotifications.clear();
     }
 }
 
