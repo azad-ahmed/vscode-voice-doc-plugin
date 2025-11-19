@@ -58,7 +58,7 @@ export class PreciseCommentInserter {
                     `✅ Kommentar eingefügt!\n📍 ${placement.reasoning}`
                 );
             } else {
-                ErrorHandler.log('PreciseInserter', '❌ Einfügen fehlgeschlagen', 'error');
+                ErrorHandler.handleError('PreciseInserter', new Error('Einfügen fehlgeschlagen'), false);
             }
 
             return success;

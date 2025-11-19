@@ -207,7 +207,7 @@ export class ASTAnalyzer {
                 case AST_NODE_TYPES.ForStatement:
                 case AST_NODE_TYPES.ForInStatement:
                 case AST_NODE_TYPES.ForOfStatement:
-                case AST_NODE_TYPES.CaseClause:
+                case AST_NODE_TYPES.SwitchCase:
                 case AST_NODE_TYPES.ConditionalExpression:
                 case AST_NODE_TYPES.LogicalExpression:
                     complexity++;

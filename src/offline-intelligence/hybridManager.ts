@@ -127,8 +127,8 @@ export class HybridIntelligenceManager {
             hasApiKey,
             hasInternetConnection,
             isComplexCode,
-            requiresHighQuality,
-            preferSpeed
+            requiresHighQuality: requiresHighQuality ?? false,
+            preferSpeed: preferSpeed ?? false
         };
     }
 

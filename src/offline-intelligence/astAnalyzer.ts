@@ -100,7 +100,7 @@ export class ASTCodeAnalyzer {
                 return this.analyzeVariableDeclaration(current, sourceFile);
             }
             
-            current = current.parent;
+            current = current.parent as ts.Node | undefined;
         }
 
         // Fallback: Generische Code-Block-Analyse
@@ -206,13 +206,13 @@ export class ASTCodeAnalyzer {
 
         // Finde Klassen-Kontext
         let className = 'unknown';
-        let current = node.parent;
+        let current: ts.Node | undefined = node.parent;
         while (current) {
             if (ts.isClassDeclaration(current) && current.name) {
                 className = current.name.getText();
                 break;
             }
-            current = current.parent;
+            current = current.parent as ts.Node | undefined;
         }
 
         return {

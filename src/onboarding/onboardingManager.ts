@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from '../utils/configManager';
 import { ErrorHandler } from '../utils/errorHandler';
-import { OpenAIWhisperProvider } from '../stt/openAIProvider';
-import { AzureSTTProvider } from '../stt/azureProvider';
+import { OpenAIWhisperProvider } from '../stt/providers/whisper';
+import { AzureSTTProvider } from '../stt/providers/azure';
 
 /**
  * Verwaltet das Onboarding neuer Benutzer
