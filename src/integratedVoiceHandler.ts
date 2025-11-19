@@ -8,9 +8,13 @@ import { ConfigManager } from './utils/configManager';
 import { ApiUsageTracker } from './utils/apiUsageTracker';
 import { AudioQualityValidator } from './utils/audioQualityValidator';
 import { SmartCommentPlacer } from './placement/smartCommentPlacer';
+import { IntelligentCommentOrchestrator } from './intelligent-placement/orchestrator';
+// ✨ NEU: AST-basierte intelligente Platzierung
+import { IntelligentCommentPlacer } from './placement/intelligentPlacer';
 
 /**
  * Verwaltet Audio-Aufnahme und Transkriptions-Workflow
+ * ✨ Jetzt mit AST-basierter intelligenter Kommentar-Platzierung
  */
 export class IntegratedVoiceHandler {
     private generator: CommentGenerator;
@@ -20,11 +24,15 @@ export class IntegratedVoiceHandler {
     private context: vscode.ExtensionContext;
     private maxRecordingTimeMs: number = 30000;
     private recordingTimer: NodeJS.Timeout | null = null;
+    // ✨ NEU: Intelligenter Placer für AST-Analyse
+    private intelligentPlacer: IntelligentCommentPlacer;
 
     constructor(context: vscode.ExtensionContext, generator: CommentGenerator) {
         this.context = context;
         this.generator = generator;
         this.recorder = new AudioRecorder();
+        // ✨ NEU: Initialisiere intelligenten Placer
+        this.intelligentPlacer = new IntelligentCommentPlacer();
         
         this.initializeSTTProvider();
     }
@@ -216,6 +224,10 @@ export class IntegratedVoiceHandler {
         }
     }
 
+    /**
+     * ✨ NEU: Nutzt AST-basierte intelligente Platzierung als ERSTEN Versuch
+     * Fallback auf Claude AI und dann auf einfache Platzierung
+     */
     private async processTranscribedText(text: string): Promise<void> {
         if (!text || text.trim().length === 0) {
             vscode.window.showWarningMessage('Keine Sprache erkannt.');
@@ -224,20 +236,94 @@ export class IntegratedVoiceHandler {
 
         ErrorHandler.log('VoiceHandler', `Erkannter Text: "${text}"`);
 
-        // ✨ NEU: Automatische Verarbeitung - KEINE Dialoge mehr!
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showWarningMessage('Kein aktiver Editor gefunden.');
+            return;
+        }
+
+        // Prüfe ob intelligente Platzierung aktiviert ist
+        const useIntelligentPlacement = ConfigManager.get<boolean>('intelligentPlacement', true);
+
+        if (useIntelligentPlacement) {
+            // ✨ NEU: Versuche ZUERST AST-basierte intelligente Platzierung
+            try {
+                await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: '🧠 Analysiere Code-Struktur...',
+                    cancellable: false
+                }, async () => {
+                    // 1. Verbessere Text mit KI (falls verfügbar)
+                    let enhancedText = text;
+                    if (this.generator.isOpenAIAvailable()) {
+                        try {
+                            const codeContext = this.getCodeContext(editor);
+                            enhancedText = await ErrorHandler.retry(
+                                () => this.generator.enhanceWithOpenAI(text, codeContext),
+                                {
+                                    maxRetries: 2,
+                                    initialDelay: 1000,
+                                    context: 'OpenAI Enhancement'
+                                }
+                            );
+                            ErrorHandler.log('VoiceHandler', `✨ KI-Verbesserung: "${enhancedText}"`, 'success');
+                        } catch (error) {
+                            ErrorHandler.handleWarning('VoiceHandler', 'KI-Verbesserung fehlgeschlagen, verwende Original');
+                        }
+                    }
+
+                    // 2. ✨ Nutze AST-basierte INTELLIGENTE Platzierung
+                    const success = await this.intelligentPlacer.placeCommentIntelligently(
+                        editor,
+                        enhancedText,
+                        editor.selection.active
+                    );
+
+                    if (success) {
+                        vscode.window.showInformationMessage(
+                            '✅ Kommentar intelligent platziert! (AST-Analyse)'
+                        );
+                        ErrorHandler.log('VoiceHandler', '🎯 AST-basierte Platzierung erfolgreich', 'success');
+                    } else {
+                        // Fallback: Versuche Claude AI
+                        ErrorHandler.log('VoiceHandler', 'AST-Platzierung abgebrochen, versuche Claude AI...');
+                        throw new Error('AST placement declined by user');
+                    }
+                });
+                return; // Erfolg!
+            } catch (error) {
+                ErrorHandler.log('VoiceHandler', '⚠️ AST-Platzierung fehlgeschlagen, nutze Fallback');
+            }
+        }
+
+        // Fallback 1: Claude AI Platzierung
+        try {
+            const success = await IntelligentCommentOrchestrator.processVoiceInputAndPlace(
+                editor,
+                text
+            );
+
+            if (success) {
+                return; // Erfolg mit Claude AI!
+            }
+        } catch (error) {
+            ErrorHandler.log('VoiceHandler', '⚠️ Claude AI Platzierung fehlgeschlagen, nutze finalen Fallback');
+        }
+
+        // Fallback 2: Einfache Platzierung
+        await this.processWithFallback(text, editor);
+    }
+
+    /**
+     * Fallback-Methode: Einfache Platzierung ohne AST
+     */
+    private async processWithFallback(text: string, editor: vscode.TextEditor): Promise<void> {
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: `🎯 Generiere Kommentar: "${text.substring(0, 30)}..."`,
             cancellable: false
         }, async () => {
             try {
-                // ✨ IMMER mit KI verbessern (wenn verfügbar)
-                const editor = vscode.window.activeTextEditor;
-                if (!editor) {
-                    vscode.window.showWarningMessage('Kein aktiver Editor gefunden.');
-                    return;
-                }
-
                 const codeContext = this.getCodeContext(editor);
                 let enhancedText = text;
 
@@ -261,7 +347,7 @@ export class IntegratedVoiceHandler {
                 // Formatiere als Kommentar
                 const comment = this.generator.formatComment(enhancedText, editor.document.languageId);
                 
-                // ✨ Verwende Smart Placement für korrekte Positionierung
+                // Verwende Smart Placement
                 const success = await SmartCommentPlacer.insertCommentAtOptimalPosition(
                     editor,
                     comment,
@@ -270,11 +356,10 @@ export class IntegratedVoiceHandler {
 
                 if (success) {
                     vscode.window.showInformationMessage(
-                        `✅ Kommentar automatisch eingefügt!`
+                        `✅ Kommentar eingefügt`
                     );
                     ErrorHandler.log('VoiceHandler', `Kommentar erfolgreich eingefügt: "${comment}"`, 'success');
                 } else {
-                    // Fallback: An aktueller Position einfügen
                     await this.insertCommentAtPosition(editor, comment);
                     vscode.window.showInformationMessage(
                         `✅ Kommentar an aktueller Position eingefügt`
@@ -282,7 +367,7 @@ export class IntegratedVoiceHandler {
                 }
 
             } catch (error) {
-                ErrorHandler.handleError('processTranscribedText', error);
+                ErrorHandler.handleError('processWithFallback', error);
                 vscode.window.showErrorMessage(
                     `❌ Fehler beim Generieren: ${error instanceof Error ? error.message : 'Unbekannt'}`
                 );
@@ -309,7 +394,6 @@ export class IntegratedVoiceHandler {
     private async insertCommentAtPosition(editor: vscode.TextEditor, comment: string): Promise<void> {
         const position = editor.selection.active;
         
-        // ✨ NEU: Verwende SmartCommentPlacer für korrekte Positionierung
         const success = await SmartCommentPlacer.insertCommentAtOptimalPosition(
             editor,
             comment,
@@ -317,7 +401,7 @@ export class IntegratedVoiceHandler {
         );
         
         if (!success) {
-            // Fallback: Füge an aktueller Position ein (alte Methode)
+            // Fallback: Füge an aktueller Position ein
             const line = editor.document.lineAt(position.line);
             const indentation = line.firstNonWhitespaceCharacterIndex;
             const indent = ' '.repeat(Math.max(0, indentation));

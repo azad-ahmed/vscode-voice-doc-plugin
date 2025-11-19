@@ -14,6 +14,8 @@ import { AutoModeController } from './automode/autoModeController';
 import { SmartCommentPlacer } from './placement/smartCommentPlacer';
 // ✨ NEU: Onboarding Manager
 import { OnboardingManager } from './onboarding/onboardingManager';
+// ✨ NEU: Intelligente Kommentar-Platzierung
+import { IntelligentCommentOrchestrator } from './intelligent-placement/orchestrator';
 
 let statusBarItem: vscode.StatusBarItem;
 let autoCommentStatusBarItem: vscode.StatusBarItem;
@@ -378,7 +380,40 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    ErrorHandler.log('Extension', 'Alle Commands registriert (inkl. erweiterte Features)', 'success');
+    // ✨ NEU: Intelligente Kommentar-Analyse (ohne Einfügen)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.analyzeCommentPlacement', async () => {
+            try {
+                await analyzeCommentPlacement();
+            } catch (error: any) {
+                ErrorHandler.handleError('analyzeCommentPlacement', error);
+            }
+        })
+    );
+
+    // ✨ NEU: AST-basierte Code-Struktur-Analyse
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.analyzeCodeStructure', async () => {
+            try {
+                await analyzeCodeStructure();
+            } catch (error: any) {
+                ErrorHandler.handleError('analyzeCodeStructure', error);
+            }
+        })
+    );
+
+    // ✨ NEU: Teste intelligente Platzierung
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.testIntelligentPlacement', async () => {
+            try {
+                await testIntelligentPlacement();
+            } catch (error: any) {
+                ErrorHandler.handleError('testIntelligentPlacement', error);
+            }
+        })
+    );
+
+    ErrorHandler.log('Extension', 'Alle Commands registriert (inkl. AST-Analyse)', 'success');
 }
 
 // ✨ NEU: Statistiken anzeigen
@@ -1024,6 +1059,79 @@ async function cleanupChaoticComments() {
             ErrorHandler.handleError('cleanupComments', error);
         }
     });
+}
+
+// ✨ NEU: Intelligente Kommentar-Analyse
+async function analyzeCommentPlacement() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showWarningMessage('⚠️ Keine aktive Datei geöffnet');
+        return;
+    }
+
+    const text = await vscode.window.showInputBox({
+        prompt: '🎯 Was soll dokumentiert werden?',
+        placeHolder: 'z.B. "Diese Funktion berechnet die Summe"',
+        ignoreFocusOut: true
+    });
+
+    if (!text) {
+        return;
+    }
+
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: '🧠 Claude analysiert Code-Struktur...',
+        cancellable: false
+    }, async () => {
+        try {
+            await IntelligentCommentOrchestrator.analyzeOnly(editor, text);
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`❌ Analyse fehlgeschlagen: ${error.message}`);
+        }
+    });
+}
+
+// ✨ NEU: AST-basierte Code-Struktur-Analyse
+async function analyzeCodeStructure() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showWarningMessage('⚠️ Keine aktive Datei geöffnet');
+        return;
+    }
+
+    const { IntelligentCommentPlacer } = await import('./placement/intelligentPlacer');
+    const placer = new IntelligentCommentPlacer();
+    
+    await placer.showCodeAnalysis(editor);
+}
+
+// ✨ NEU: Teste intelligente Platzierung
+async function testIntelligentPlacement() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showWarningMessage('⚠️ Keine aktive Datei geöffnet');
+        return;
+    }
+
+    const text = await vscode.window.showInputBox({
+        prompt: '🎯 Gib Kommentar-Text ein (zum Testen)',
+        placeHolder: 'z.B. "Diese Funktion berechnet die Summe"',
+        ignoreFocusOut: true
+    });
+
+    if (!text) {
+        return;
+    }
+
+    const { IntelligentCommentPlacer } = await import('./placement/intelligentPlacer');
+    const placer = new IntelligentCommentPlacer();
+    
+    await placer.placeCommentIntelligently(
+        editor,
+        text,
+        editor.selection.active
+    );
 }
 
 export function deactivate() {

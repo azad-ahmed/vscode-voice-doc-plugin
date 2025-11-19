@@ -23,7 +23,9 @@
     "speech-to-text",
     "auto-mode",
     "learning",
-    "code-analysis"
+    "code-analysis",
+    "ast-parser",
+    "intelligent-placement"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -140,6 +142,21 @@
         "command": "voiceDocPlugin.resetOnboarding",
         "title": "Voice Doc: Onboarding zurücksetzen",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "voiceDocPlugin.analyzeCommentPlacement",
+        "title": "Voice Doc: Kommentar-Platzierung analysieren (Claude AI)",
+        "icon": "$(search)"
+      },
+      {
+        "command": "voiceDocPlugin.analyzeCodeStructure",
+        "title": "Voice Doc: Code-Struktur analysieren (AST)",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "voiceDocPlugin.testIntelligentPlacement",
+        "title": "Voice Doc: Intelligente Platzierung testen",
+        "icon": "$(target)"
       }
     ],
     "keybindings": [
@@ -159,6 +176,12 @@
         "command": "voiceDocPlugin.toggleAutoMode",
         "key": "ctrl+shift+a",
         "mac": "cmd+shift+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "voiceDocPlugin.analyzeCodeStructure",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
         "when": "editorTextFocus"
       }
     ],
@@ -189,6 +212,16 @@
         {
           "command": "voiceDocPlugin.analyzeCurrentFunction",
           "group": "voiceDoc@3",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "voiceDocPlugin.analyzeCodeStructure",
+          "group": "voiceDoc@4",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "voiceDocPlugin.testIntelligentPlacement",
+          "group": "voiceDoc@5",
           "when": "editorTextFocus"
         }
       ]
@@ -283,6 +316,11 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-Kommentierung aktiviert"
+        },
+        "voiceDocPlugin.intelligentPlacement": {
+          "type": "boolean",
+          "default": true,
+          "description": "AST-basierte intelligente Kommentar-Platzierung aktivieren"
         }
       }
     }
@@ -296,6 +334,8 @@
   },
   "dependencies": {
     "@azure/core-auth": "^1.5.0",
+    "@typescript-eslint/typescript-estree": "^8.14.0",
+    "@typescript-eslint/types": "^8.14.0",
     "axios": "^1.12.2",
     "form-data": "^4.0.4",
     "microsoft-cognitiveservices-speech-sdk": "^1.46.0"
