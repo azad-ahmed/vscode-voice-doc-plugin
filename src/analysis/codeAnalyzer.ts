@@ -4,6 +4,7 @@ import { LearningSystem } from '../learning/learningSystem';
 
 /**
  * Code Analyzer Service - Analysiert Code automatisch mit GPT-4
+ * ✨ OPTIMIERT: Bessere Prompts für präzise Kommentare
  */
 export class CodeAnalyzer {
     private cache: Map<string, AnalysisResult>;
@@ -22,6 +23,7 @@ export class CodeAnalyzer {
         // Prüfe Cache
         const cacheKey = this.generateCacheKey(codeContext);
         if (this.cache.has(cacheKey)) {
+            console.log(`✅ Cache hit for ${codeContext.functionName}`);
             return this.cache.get(cacheKey)!;
         }
 
@@ -35,8 +37,10 @@ export class CodeAnalyzer {
             // Hole ähnliche Beispiele aus Learning System
             const similarExamples = this.learningSystem.findSimilarExamples(codeContext);
             
-            // Erstelle Prompt mit Kontext
-            const prompt = this.buildAnalysisPrompt(codeContext, similarExamples);
+            // Erstelle VERBESSERTEN Prompt
+            const prompt = this.buildImprovedPrompt(codeContext, similarExamples);
+
+            console.log(`🤖 Calling GPT-4 for ${codeContext.functionType}: ${codeContext.functionName}`);
 
             // Rufe OpenAI API
             const response = await axios.post(
@@ -46,15 +50,15 @@ export class CodeAnalyzer {
                     messages: [
                         {
                             role: 'system',
-                            content: this.getSystemPrompt()
+                            content: this.getImprovedSystemPrompt()
                         },
                         {
                             role: 'user',
                             content: prompt
                         }
                     ],
-                    temperature: 0.3,
-                    max_tokens: 500
+                    temperature: 0.2, // Niedriger für konsistentere Outputs
+                    max_tokens: 300 // Reduziert für kürzere Kommentare
                 },
                 {
                     headers: {
@@ -65,7 +69,9 @@ export class CodeAnalyzer {
                 }
             );
 
-            const analysis = this.parseAnalysisResponse(response.data);
+            const analysis = this.parseImprovedResponse(response.data, codeContext);
+            
+            console.log(`✅ GPT Response: "${analysis.description.substring(0, 100)}..."`);
             
             // Cache Ergebnis
             this.cache.set(cacheKey, analysis);
@@ -79,92 +85,159 @@ export class CodeAnalyzer {
             return analysis;
 
         } catch (error) {
-            console.error('Code analysis error:', error);
+            console.error('❌ Code analysis error:', error);
             throw new Error(`Analysefehler: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`);
         }
     }
 
     /**
-     * Erstellt System-Prompt für Code-Analyse
+     * ✨ NEUER, VERBESSERTER System-Prompt
+     * Klare Anweisungen: NUR den Kommentar zurückgeben!
      */
-    private getSystemPrompt(): string {
-        return `Du bist ein Experte für Code-Dokumentation. Deine Aufgabe ist es, Code zu analysieren und präzise, hilfreiche Dokumentation zu erstellen.
+    private getImprovedSystemPrompt(): string {
+        return `Du bist ein Experte für Code-Dokumentation. 
+
+WICHTIG: Gib DIREKT den Dokumentations-Text zurück, OHNE Meta-Text!
 
 Richtlinien:
-1. Erkläre WAS der Code macht und WARUM (nicht nur wie)
-2. Beschreibe wichtige Parameter und Rückgabewerte
-3. Erwähne Besonderheiten, Edge Cases oder potenzielle Probleme
-4. Verwende eine klare, technisch präzise Sprache
-5. Halte dich kurz aber informativ (2-4 Sätze)
-6. Berücksichtige den Kontext und vorhandene Code-Patterns
+1. Beschreibe WAS der Code macht (nicht WIE)
+2. Sei präzise und knapp (1-3 Sätze)
+3. Verwende deutsche Sprache
+4. KEINE Phrasen wie "Erstelle einen Kommentar" oder "Der Code macht"
+5. Starte direkt mit der Beschreibung
+6. Keine JSON-Formatierung, nur purer Text
 
-Antwort-Format:
-{
-  "description": "Hauptbeschreibung der Funktionalität",
-  "details": "Zusätzliche technische Details",
-  "confidence": 0.0-1.0 (Deine Einschätzung wie sicher die Analyse ist)
-}`;
+FALSCH: "Erstellt einen JSDoc-Kommentar für die Methode..."
+RICHTIG: "Verarbeitet Benutzerdaten und speichert sie in der Datenbank"
+
+FALSCH: "Der Code führt aus..."
+RICHTIG: "Führt die Authentifizierung durch und gibt ein Token zurück"`;
     }
 
     /**
-     * Erstellt Analyse-Prompt mit Kontext
+     * ✨ VERBESSERTER Prompt - Direkte Anweisungen
      */
-    private buildAnalysisPrompt(codeContext: CodeContext, similarExamples: any[]): string {
-        let prompt = `Analysiere folgenden Code und erstelle eine präzise Dokumentation:\n\n`;
+    private buildImprovedPrompt(codeContext: CodeContext, similarExamples: any[]): string {
+        let prompt = '';
         
-        prompt += `**Programmiersprache:** ${codeContext.languageId}\n`;
-        prompt += `**Kontext:** ${codeContext.functionType} "${codeContext.functionName}"\n\n`;
-        prompt += `**Code:**\n\`\`\`${codeContext.languageId}\n${codeContext.code}\n\`\`\`\n\n`;
+        // Kontext
+        prompt += `Sprache: ${codeContext.languageId}\n`;
+        prompt += `Element: ${codeContext.functionType} "${codeContext.functionName}"\n\n`;
+        
+        // Code
+        prompt += `Code:\n\`\`\`${codeContext.languageId}\n${codeContext.code}\n\`\`\`\n\n`;
 
-        // Füge ähnliche Beispiele hinzu wenn vorhanden
+        // Ähnliche Beispiele für Konsistenz
         if (similarExamples && similarExamples.length > 0) {
-            prompt += `**Ähnliche dokumentierte Beispiele aus diesem Projekt:**\n`;
-            similarExamples.slice(0, 3).forEach((example, i) => {
-                prompt += `\nBeispiel ${i + 1}:\n`;
-                prompt += `Code: ${example.codeContext.code.substring(0, 100)}...\n`;
-                prompt += `Dokumentation: ${example.output.substring(0, 150)}...\n`;
+            prompt += `Stil-Beispiele aus diesem Projekt:\n`;
+            similarExamples.slice(0, 2).forEach((example, i) => {
+                // Extrahiere nur den Kommentar-Text (ohne /** */ etc.)
+                const cleanComment = this.extractCommentText(example.output);
+                prompt += `${i + 1}. "${cleanComment}"\n`;
             });
-            prompt += `\nOrientiere dich am Stil dieser Beispiele für Konsistenz.\n\n`;
+            prompt += `\n`;
         }
 
-        prompt += `Erstelle nun eine passende Dokumentation im JSON-Format.`;
+        // Klare Anweisung
+        prompt += `Schreibe JETZT eine kurze, präzise Dokumentation für "${codeContext.functionName}".\n`;
+        prompt += `NUR die Beschreibung, KEIN Meta-Text!\n`;
+        prompt += `Antworte in maximal 2 Sätzen.`;
 
         return prompt;
     }
 
     /**
-     * Parst Analyse-Response
+     * ✨ VERBESSERTE Response-Parsing
+     * Entfernt Meta-Text und extrahiert nur die Beschreibung
      */
-    private parseAnalysisResponse(responseData: any): AnalysisResult {
+    private parseImprovedResponse(responseData: any, codeContext: CodeContext): AnalysisResult {
         try {
-            const content = responseData.choices[0].message.content;
+            let content = responseData.choices[0].message.content.trim();
             
-            // Versuche JSON zu extrahieren
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                return {
-                    description: parsed.description || content,
-                    details: parsed.details || '',
-                    confidence: parsed.confidence || 0.5
-                };
+            // Entferne häufige Meta-Phrasen
+            const metaPhrases = [
+                'Erstellt einen JSDoc-Kommentar',
+                'Erstelle einen professionellen JSDoc-Kommentar',
+                'Der Kommentar soll beschreiben',
+                'Dokumentiere die',
+                'Dokumentiert die',
+                'Der Code führt aus',
+                'Diese Methode',
+                'Diese Funktion',
+                'Diese Klasse'
+            ];
+
+            for (const phrase of metaPhrases) {
+                if (content.includes(phrase)) {
+                    console.warn(`⚠️ Meta-Text erkannt: "${phrase}" - versuche zu bereinigen`);
+                    // Wenn Meta-Text erkannt, erstelle Fallback
+                    return this.createFallbackComment(codeContext);
+                }
             }
-            
-            // Fallback: Verwende ganzen Text
+
+            // Entferne JSON-Wrapper falls vorhanden
+            const jsonMatch = content.match(/\{[\s\S]*"description":\s*"([^"]+)"[\s\S]*\}/);
+            if (jsonMatch) {
+                content = jsonMatch[1];
+            }
+
+            // Entferne Anführungszeichen am Anfang/Ende
+            content = content.replace(/^["']|["']$/g, '').trim();
+
+            // Validierung: Ist es ein sinnvoller Kommentar?
+            if (content.length < 10 || content.length > 500) {
+                console.warn(`⚠️ Ungültige Länge (${content.length}), verwende Fallback`);
+                return this.createFallbackComment(codeContext);
+            }
+
             return {
                 description: content,
                 details: '',
-                confidence: 0.5
+                confidence: 0.85
             };
 
         } catch (error) {
-            console.error('Failed to parse analysis response:', error);
-            return {
-                description: responseData.choices[0].message.content,
-                details: '',
-                confidence: 0.3
-            };
+            console.error('❌ Failed to parse response:', error);
+            return this.createFallbackComment(codeContext);
         }
+    }
+
+    /**
+     * ✨ NEU: Fallback-Kommentar wenn GPT versagt
+     */
+    private createFallbackComment(codeContext: CodeContext): AnalysisResult {
+        let description = '';
+        
+        switch (codeContext.functionType) {
+            case 'class':
+                description = `Implementiert die ${codeContext.functionName} Klasse`;
+                break;
+            case 'function':
+                description = `Führt ${codeContext.functionName} Operation aus`;
+                break;
+            case 'method':
+                description = `Verarbeitet ${codeContext.functionName}`;
+                break;
+            default:
+                description = `Implementiert ${codeContext.functionName}`;
+        }
+
+        return {
+            description,
+            details: 'Automatisch generierter Fallback-Kommentar',
+            confidence: 0.3
+        };
+    }
+
+    /**
+     * Extrahiert reinen Text aus Kommentar (ohne Kommentar-Syntax)
+     */
+    private extractCommentText(comment: string): string {
+        return comment
+            .replace(/\/\*\*|\*\/|\/\*|\*|\/\/|"""|'''/g, '') // Entferne Kommentar-Zeichen
+            .replace(/^\s+|\s+$/g, '') // Trim
+            .replace(/\n\s*/g, ' ') // Mehrzeilen zu einer Zeile
+            .substring(0, 150); // Max 150 Zeichen
     }
 
     /**
@@ -211,6 +284,7 @@ Antwort-Format:
      */
     clearCache(): void {
         this.cache.clear();
+        console.log('🗑️ Cache cleared');
     }
 }
 
@@ -231,7 +305,6 @@ export interface AnalysisResult {
     confidence: number;
 }
 
-// Für Kompatibilität mit bestehendem Code
 export interface CodeElement {
     type: 'function' | 'class' | 'method';
     name: string;

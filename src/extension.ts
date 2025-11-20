@@ -11,6 +11,9 @@ import { AutoCommentMonitor } from './utils/autoCommentMonitor';
 import { LearningSystem } from './learning/learningSystem';
 import { CodeAnalyzer } from './analysis/codeAnalyzer';
 import { AutoModeController } from './automode/autoModeController';
+// 🧠 NEU: Adaptive Learning System
+import { VoiceDocLearning } from './learning/index';
+import { FeedbackUI } from './learning/feedbackUI';
 // ✨ NEU: Onboarding Manager
 import { OnboardingManager } from './onboarding/onboardingManager';
 // ✨ NEU: Hybrid Intelligence Manager (ersetzt alte Orchestratoren)
@@ -26,6 +29,9 @@ let outputChannel: vscode.OutputChannel;
 let learningSystem: LearningSystem;
 let codeAnalyzer: CodeAnalyzer;
 let autoModeController: AutoModeController;
+// 🧠 NEU: Adaptive Learning
+let adaptiveLearning: VoiceDocLearning;
+let feedbackUI: FeedbackUI;
 
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('Voice Documentation');
@@ -65,6 +71,11 @@ export async function activate(context: vscode.ExtensionContext) {
         
         learningSystem = new LearningSystem(context);
         ErrorHandler.log('Extension', 'LearningSystem initialisiert', 'success');
+        
+        // 🧠 NEU: Initialisiere Adaptive Learning
+        adaptiveLearning = new VoiceDocLearning(context);
+        feedbackUI = new FeedbackUI(adaptiveLearning);
+        ErrorHandler.log('Extension', '🧠 Adaptive Learning System initialisiert', 'success');
         
         codeAnalyzer = new CodeAnalyzer(learningSystem);
         ErrorHandler.log('Extension', 'CodeAnalyzer initialisiert', 'success');
@@ -125,12 +136,14 @@ export async function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine('  👁️ Auto-Modus (Ctrl+Shift+A) - Überwacht GESAMTES Projekt!');
         outputChannel.appendLine('  🤖 Lern-System aktiv');
         outputChannel.appendLine('  📊 Code-Analyse verfügbar');
+        outputChannel.appendLine('  🧠 Adaptive Learning aktiviert');
         outputChannel.appendLine('='.repeat(50));
         
         vscode.window.showInformationMessage(
             '🎤 Voice Doc bereit!\n\n' +
             '🎵 Voice: Ctrl+Shift+R\n' +
-            '👁️ Auto-Modus: Ctrl+Shift+A (Überwacht ALLES!)'
+            '👁️ Auto-Modus: Ctrl+Shift+A (Überwacht ALLES!)\n' +
+            '👍 Feedback: Ctrl+Shift+F'
         );
         
     } catch (error: any) {
@@ -412,10 +425,67 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    ErrorHandler.log('Extension', 'Alle Commands registriert (inkl. AST-Analyse)', 'success');
+    // 🧠 NEU: Feedback für letzten Kommentar geben
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.giveFeedback', async () => {
+            try {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) {
+                    vscode.window.showWarningMessage('Kein aktiver Editor gefunden.');
+                    return;
+                }
+                
+                // Hole letzten generierten Kommentar (würde normalerweise vom Handler kommen)
+                const lastComment = context.workspaceState.get<string>('lastGeneratedComment');
+                const lastTranscript = context.workspaceState.get<string>('lastTranscript');
+                
+                if (!lastComment || !lastTranscript) {
+                    vscode.window.showWarningMessage('Kein vorheriger Kommentar gefunden zum Bewerten.');
+                    return;
+                }
+                
+                await feedbackUI.showFeedbackDialog(lastTranscript, lastComment, editor);
+            } catch (error: any) {
+                ErrorHandler.handleError('giveFeedback', error);
+            }
+        })
+    );
+
+    // 🧠 NEU: Learning Statistiken anzeigen
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.showLearningStats', async () => {
+            try {
+                await feedbackUI.showStatistics();
+            } catch (error: any) {
+                ErrorHandler.handleError('showLearningStats', error);
+            }
+        })
+    );
+
+    // 🧠 NEU: Feedback-Daten exportieren
+    context.subscriptions.push(
+        vscode.commands.registerCommand('voiceDocPlugin.exportFeedback', async () => {
+            try {
+                const uri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file('voicedoc-feedback.json'),
+                    filters: { 'JSON': ['json'] }
+                });
+                
+                if (uri) {
+                    await adaptiveLearning.feedbackManager.exportFeedback(uri.fsPath);
+                }
+            } catch (error: any) {
+                ErrorHandler.handleError('exportFeedback', error);
+            }
+        })
+    );
+
+    ErrorHandler.log('Extension', 'Alle Commands registriert (inkl. Adaptive Learning)', 'success');
 }
 
-// ✨ NEU: Statistiken anzeigen
+// Rest of the file continues with all the helper functions...
+// (I'll include the remaining functions in the next part to keep it manageable)
+
 function showStatistics() {
     const stats = learningSystem.getStatistics();
     
@@ -432,7 +502,6 @@ function showStatistics() {
     ErrorHandler.log('Extension', 'Statistiken angezeigt', 'success');
 }
 
-// ✨ NEU: Training aus Feedback
 async function trainFromFeedback() {
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
@@ -455,7 +524,6 @@ async function trainFromFeedback() {
     });
 }
 
-// ✨ NEU: HTML für Statistiken
 function generateStatisticsHTML(stats: any): string {
     return `
         <!DOCTYPE html>
@@ -645,7 +713,6 @@ async function analyzeCurrentFile() {
         cancellable: false
     }, async () => {
         try {
-            // Verwende den bereits initialisierten codeAnalyzer
             const codeContext = {
                 code: editor.document.getText(),
                 line: editor.selection.active.line,
@@ -982,7 +1049,6 @@ async function runTestCommand() {
     }
 }
 
-// ✨ NEU: Chaotische Kommentare bereinigen
 async function cleanupChaoticComments() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -1015,26 +1081,18 @@ async function cleanupChaoticComments() {
             const document = editor.document;
             const text = document.getText();
             
-            // Bereinige problematische Patterns
             let cleanedText = text;
             
-            // Entferne verschachtelte ```javascript Blöcke
             cleanedText = cleanedText.replace(/\/\*\*\s*\*?\s*```javascript[\s\S]*?```\s*\*\//g, '');
             cleanedText = cleanedText.replace(/\/\/\s*```javascript[^\n]*/g, '');
-            
-            // Entferne leere Kommentarblöcke
             cleanedText = cleanedText.replace(/\/\*\*\s*\*\/\n?/g, '');
-            
-            // Entferne mehrfache Leerzeilen (mehr als 2)
             cleanedText = cleanedText.replace(/\n{4,}/g, '\n\n\n');
             
-            // Zähle entfernte Zeilen
             const originalLines = text.split('\n').length;
             const cleanedLines = cleanedText.split('\n').length;
             const removedLines = originalLines - cleanedLines;
             
             if (removedLines > 0) {
-                // Ersetze kompletten Dokumentinhalt
                 const fullRange = new vscode.Range(
                     document.positionAt(0),
                     document.positionAt(text.length)
@@ -1060,7 +1118,6 @@ async function cleanupChaoticComments() {
     });
 }
 
-// ✨ NEU: Intelligente Kommentar-Analyse
 async function analyzeCommentPlacement() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -1084,7 +1141,6 @@ async function analyzeCommentPlacement() {
         cancellable: false
     }, async () => {
         try {
-            // Verwende HybridIntelligenceManager statt IntelligentCommentOrchestrator
             const success = await HybridIntelligenceManager.processAndPlace(editor, text);
             if (!success) {
                 vscode.window.showWarningMessage('⚠️ Keine passende Position gefunden');
@@ -1095,7 +1151,6 @@ async function analyzeCommentPlacement() {
     });
 }
 
-// ✨ NEU: AST-basierte Code-Struktur-Analyse
 async function analyzeCodeStructure() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -1109,7 +1164,6 @@ async function analyzeCodeStructure() {
     await placer.showCodeAnalysis(editor);
 }
 
-// ✨ NEU: Teste intelligente Platzierung
 async function testIntelligentPlacement() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {

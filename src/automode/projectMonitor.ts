@@ -16,6 +16,11 @@ export class ProjectMonitor {
     private analysisLock: boolean = false;
     private activeNotifications: Set<string> = new Set(); // Verhindert duplicate Notifications
     
+    // ✨ Erweiterte Statistiken
+    private totalDetections: number = 0;
+    private documentsProcessed: Set<string> = new Set();
+    private suggestionsAccepted: number = 0;
+    
     constructor(
         private codeAnalyzer: CodeAnalyzer,
         private learningSystem: LearningSystem,
@@ -232,6 +237,9 @@ export class ProjectMonitor {
         try {
             console.log(`🔎 Analysiere Dokument: ${document.fileName}`);
             
+            // ✨ Track processed document
+            this.documentsProcessed.add(document.uri.toString());
+            
             const text = document.getText();
         const languageId = document.languageId;
 
@@ -314,6 +322,7 @@ export class ProjectMonitor {
                     line: index,
                     type: 'class'
                 });
+                this.totalDetections++; // ✨ Track detection
             }
         });
 
@@ -386,6 +395,7 @@ export class ProjectMonitor {
                         line: index,
                         type: 'function'
                     });
+                    this.totalDetections++; // ✨ Track detection
                 }
             }
         });
@@ -583,6 +593,9 @@ export class ProjectMonitor {
             confidence: confidence,
             timestamp: Date.now()
         });
+        
+        // ✨ Track accepted suggestion
+        this.suggestionsAccepted++;
 
         vscode.window.showInformationMessage(
             `✅ Dokumentation für "${codeContext.functionName}" eingefügt!`
@@ -641,6 +654,9 @@ export class ProjectMonitor {
                 confidence: confidence,
                 timestamp: Date.now()
             });
+            
+            // ✨ Track accepted suggestion
+            this.suggestionsAccepted++;
 
             vscode.window.showInformationMessage(
                 `✅ Bearbeitete Dokumentation für "${codeContext.functionName}" eingefügt!`
@@ -714,6 +730,24 @@ export class ProjectMonitor {
     private getMinConfidence(): number {
         const config = vscode.workspace.getConfiguration('voiceDocPlugin');
         return config.get('minConfidence', 0.7);
+    }
+
+    /**
+     * Holt Statistiken über die Überwachung
+     */
+    getStatistics() {
+        return {
+            isActive: this.fileWatcher !== undefined,
+            processedCount: this.processedFunctions.size,
+            runningAnalyses: this.runningAnalyses.size,
+            queuedAnalyses: this.analysisQueue.size,
+            activeNotifications: this.activeNotifications.size,
+            monitoredDocuments: this.documentChangeListeners.size,
+            // ✨ Neue Statistiken
+            totalDetections: this.totalDetections,
+            documentsProcessed: this.documentsProcessed.size,
+            suggestionsAccepted: this.suggestionsAccepted
+        };
     }
 
     /**

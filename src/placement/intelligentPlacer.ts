@@ -2,7 +2,7 @@
 // Intelligente Kommentar-Platzierung basierend auf AST-Analyse
 // ✨ Neu hinzugefügt für Diplomarbeit - Multi-Kriterien-Scoring-System
 
-import { ASTAnalyzer, CodeElement } from '../analysis/astAnalyzer';
+import { ASTAnalyzer, CodeElement } from '../offline-intelligence/astAnalyzerAdapter';
 import * as vscode from 'vscode';
 
 export interface PlacementSuggestion {
@@ -348,7 +348,7 @@ export class IntelligentCommentPlacer {
 
             if (element.parameters && element.parameters.length > 0) {
                 lines.push(' *');
-                element.parameters.forEach(param => {
+                element.parameters.forEach((param: { name: string; type?: string }) => {
                     const typeAnnot = param.type ? ` {${param.type}}` : '';
                     lines.push(` * @param${typeAnnot} ${param.name}`);
                 });
