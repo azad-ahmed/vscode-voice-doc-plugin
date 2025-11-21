@@ -3,8 +3,7 @@ import axios from 'axios';
 import { LearningSystem } from '../learning/learningSystem';
 
 /**
- * Code Analyzer Service - Analysiert Code automatisch mit GPT-4
- * ✨ OPTIMIERT: Bessere Prompts für präzise Kommentare
+ * Code Analyzer Service - Analyzes code automatically with GPT-4
  */
 export class CodeAnalyzer {
     private cache: Map<string, AnalysisResult>;
@@ -17,13 +16,12 @@ export class CodeAnalyzer {
     }
 
     /**
-     * Analysiert Code-Kontext und generiert Dokumentationsvorschlag
+     * Analyzes code context and generates documentation suggestion
      */
     async analyzeCode(codeContext: CodeContext): Promise<AnalysisResult> {
-        // Prüfe Cache
         const cacheKey = this.generateCacheKey(codeContext);
         if (this.cache.has(cacheKey)) {
-            console.log(`✅ Cache hit for ${codeContext.functionName}`);
+            console.log(`Cache hit for ${codeContext.functionName}`);
             return this.cache.get(cacheKey)!;
         }
 
@@ -31,18 +29,14 @@ export class CodeAnalyzer {
             const apiKey = await this.getApiKey();
 
             if (!apiKey) {
-                throw new Error('OpenAI API Key nicht konfiguriert');
+                throw new Error('OpenAI API Key not configured');
             }
 
-            // Hole ähnliche Beispiele aus Learning System
             const similarExamples = this.learningSystem.findSimilarExamples(codeContext);
-            
-            // Erstelle VERBESSERTEN Prompt
             const prompt = this.buildImprovedPrompt(codeContext, similarExamples);
 
-            console.log(`🤖 Calling GPT-4 for ${codeContext.functionType}: ${codeContext.functionName}`);
+            console.log(`Calling GPT-4 for ${codeContext.functionType}: ${codeContext.functionName}`);
 
-            // Rufe OpenAI API
             const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
                 {
@@ -57,8 +51,8 @@ export class CodeAnalyzer {
                             content: prompt
                         }
                     ],
-                    temperature: 0.2, // Niedriger für konsistentere Outputs
-                    max_tokens: 300 // Reduziert für kürzere Kommentare
+                    temperature: 0.2,
+                    max_tokens: 150  // REDUZIERT von 300
                 },
                 {
                     headers: {
@@ -71,124 +65,127 @@ export class CodeAnalyzer {
 
             const analysis = this.parseImprovedResponse(response.data, codeContext);
             
-            console.log(`✅ GPT Response: "${analysis.description.substring(0, 100)}..."`);
+            console.log(`GPT Response: "${analysis.description.substring(0, 100)}..."`);
             
-            // Cache Ergebnis
             this.cache.set(cacheKey, analysis);
             
-            // Cache-Größe begrenzen
             if (this.cache.size > this.CACHE_SIZE) {
                 const firstKey = this.cache.keys().next().value;
-                this.cache.delete(firstKey);
+                if (firstKey !== undefined) {
+                    this.cache.delete(firstKey);
+                }
             }
 
             return analysis;
 
         } catch (error) {
-            console.error('❌ Code analysis error:', error);
-            throw new Error(`Analysefehler: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`);
+            console.error('Code analysis error:', error);
+            throw new Error(`Analysis error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
     /**
-     * ✨ NEUER, VERBESSERTER System-Prompt
-     * Klare Anweisungen: NUR den Kommentar zurückgeben!
+     * Improved system prompt with VERY CLEAR instructions
      */
     private getImprovedSystemPrompt(): string {
-        return `Du bist ein Experte für Code-Dokumentation. 
+        return `You are a code documentation expert. Your task is to write SHORT, DIRECT documentation.
 
-WICHTIG: Gib DIREKT den Dokumentations-Text zurück, OHNE Meta-Text!
+CRITICAL RULES:
+1. Write ONLY the documentation text - NO meta-text!
+2. Start directly with the description
+3. Maximum 1-2 sentences
+4. Use German language
+5. Describe WHAT the code does, not HOW
 
-Richtlinien:
-1. Beschreibe WAS der Code macht (nicht WIE)
-2. Sei präzise und knapp (1-3 Sätze)
-3. Verwende deutsche Sprache
-4. KEINE Phrasen wie "Erstelle einen Kommentar" oder "Der Code macht"
-5. Starte direkt mit der Beschreibung
-6. Keine JSON-Formatierung, nur purer Text
+FORBIDDEN phrases (NEVER use these):
+❌ "Erstellt einen"
+❌ "Erstelle einen"
+❌ "JSDoc-Kommentar"
+❌ "Der Kommentar soll"
+❌ "Dokumentiere"
+❌ "beschreibt"
 
-FALSCH: "Erstellt einen JSDoc-Kommentar für die Methode..."
-RICHTIG: "Verarbeitet Benutzerdaten und speichert sie in der Datenbank"
+GOOD examples:
+✅ "Verwaltet Benutzer-Authentifizierung und Session-Daten"
+✅ "Berechnet die Gesamtsumme aller Warenkorb-Artikel"
+✅ "Erstellt eine Datenbankverbindung mit den angegebenen Parametern"
 
-FALSCH: "Der Code führt aus..."
-RICHTIG: "Führt die Authentifizierung durch und gibt ein Token zurück"`;
+BAD examples:
+❌ "Erstellt einen JSDoc-Kommentar für die Methode..."
+❌ "Der Kommentar beschreibt die Funktion..."
+
+REMEMBER: Output ONLY the description, nothing else!`;
     }
 
     /**
-     * ✨ VERBESSERTER Prompt - Direkte Anweisungen
+     * Builds improved prompt with VERY DIRECT instructions
      */
     private buildImprovedPrompt(codeContext: CodeContext, similarExamples: any[]): string {
-        let prompt = '';
-        
-        // Kontext
-        prompt += `Sprache: ${codeContext.languageId}\n`;
-        prompt += `Element: ${codeContext.functionType} "${codeContext.functionName}"\n\n`;
-        
-        // Code
-        prompt += `Code:\n\`\`\`${codeContext.languageId}\n${codeContext.code}\n\`\`\`\n\n`;
+        // SIMPLIFIED PROMPT
+        return `Analyze this ${codeContext.functionType}: "${codeContext.functionName}"
 
-        // Ähnliche Beispiele für Konsistenz
-        if (similarExamples && similarExamples.length > 0) {
-            prompt += `Stil-Beispiele aus diesem Projekt:\n`;
-            similarExamples.slice(0, 2).forEach((example, i) => {
-                // Extrahiere nur den Kommentar-Text (ohne /** */ etc.)
-                const cleanComment = this.extractCommentText(example.output);
-                prompt += `${i + 1}. "${cleanComment}"\n`;
-            });
-            prompt += `\n`;
-        }
+Code:
+\`\`\`${codeContext.languageId}
+${codeContext.code.substring(0, 500)}
+\`\`\`
 
-        // Klare Anweisung
-        prompt += `Schreibe JETZT eine kurze, präzise Dokumentation für "${codeContext.functionName}".\n`;
-        prompt += `NUR die Beschreibung, KEIN Meta-Text!\n`;
-        prompt += `Antworte in maximal 2 Sätzen.`;
-
-        return prompt;
+Write a SHORT documentation (1-2 sentences, German, direct description).
+Output ONLY the text, NO meta-text!`;
     }
 
     /**
-     * ✨ VERBESSERTE Response-Parsing
-     * Entfernt Meta-Text und extrahiert nur die Beschreibung
+     * IMPROVED response parsing with STRICT meta-text detection
      */
     private parseImprovedResponse(responseData: any, codeContext: CodeContext): AnalysisResult {
         try {
             let content = responseData.choices[0].message.content.trim();
             
-            // Entferne häufige Meta-Phrasen
-            const metaPhrases = [
-                'Erstellt einen JSDoc-Kommentar',
-                'Erstelle einen professionellen JSDoc-Kommentar',
-                'Der Kommentar soll beschreiben',
-                'Dokumentiere die',
-                'Dokumentiert die',
-                'Der Code führt aus',
-                'Diese Methode',
-                'Diese Funktion',
-                'Diese Klasse'
+            // ERWEITERTE Meta-Phrase Detection
+            const forbiddenPatterns = [
+                /erstellt?\s+einen?\s+(jsdoc|kommentar)/i,
+                /erstelle\s+einen?\s+(professionellen|jsdoc)/i,
+                /der\s+kommentar\s+soll/i,
+                /dokumentiere?\s+(die|den|das)/i,
+                /beschreibt?,?\s+was\s+(der\s+code|die\s+methode)/i,
+                /der\s+code\s+führt\s+aus/i,
+                /diese\s+(methode|funktion|klasse)\s+wird/i,
+                /kommentar\s+für\s+(dieses?|die|den)/i,
+                /soll\s+beschreiben/i
             ];
 
-            for (const phrase of metaPhrases) {
-                if (content.includes(phrase)) {
-                    console.warn(`⚠️ Meta-Text erkannt: "${phrase}" - versuche zu bereinigen`);
-                    // Wenn Meta-Text erkannt, erstelle Fallback
+            // Prüfe ALLE Patterns
+            for (const pattern of forbiddenPatterns) {
+                if (pattern.test(content)) {
+                    console.warn(`❌ Meta-text detected (pattern: ${pattern})`);
+                    console.warn(`   Content: "${content.substring(0, 100)}..."`);
                     return this.createFallbackComment(codeContext);
                 }
             }
 
-            // Entferne JSON-Wrapper falls vorhanden
+            // Entferne JSON wenn vorhanden
             const jsonMatch = content.match(/\{[\s\S]*"description":\s*"([^"]+)"[\s\S]*\}/);
             if (jsonMatch) {
                 content = jsonMatch[1];
             }
 
-            // Entferne Anführungszeichen am Anfang/Ende
-            content = content.replace(/^["']|["']$/g, '').trim();
+            // Cleanup
+            content = content
+                .replace(/^["']|["']$/g, '')
+                .replace(/^\*+\s*/g, '')  // Remove leading asterisks
+                .trim();
 
-            // Validierung: Ist es ein sinnvoller Kommentar?
-            if (content.length < 10 || content.length > 500) {
-                console.warn(`⚠️ Ungültige Länge (${content.length}), verwende Fallback`);
+            // Validierung
+            if (content.length < 10) {
+                console.warn(`⚠️ Content too short (${content.length} chars)`);
                 return this.createFallbackComment(codeContext);
             }
+
+            if (content.length > 500) {
+                console.warn(`⚠️ Content too long (${content.length} chars), truncating`);
+                content = content.substring(0, 500) + '...';
+            }
+
+            console.log(`✅ Valid comment generated: "${content.substring(0, 80)}..."`);
 
             return {
                 description: content,
@@ -197,51 +194,68 @@ RICHTIG: "Führt die Authentifizierung durch und gibt ein Token zurück"`;
             };
 
         } catch (error) {
-            console.error('❌ Failed to parse response:', error);
+            console.error('Failed to parse response:', error);
             return this.createFallbackComment(codeContext);
         }
     }
 
     /**
-     * ✨ NEU: Fallback-Kommentar wenn GPT versagt
+     * Creates BETTER fallback comments
      */
     private createFallbackComment(codeContext: CodeContext): AnalysisResult {
         let description = '';
         
+        const name = codeContext.functionName;
+        
         switch (codeContext.functionType) {
             case 'class':
-                description = `Implementiert die ${codeContext.functionName} Klasse`;
+                description = `Implementiert die ${name}-Klasse mit zugehörigen Methoden und Properties`;
                 break;
             case 'function':
-                description = `Führt ${codeContext.functionName} Operation aus`;
+                description = `Führt die ${name}-Operation aus und gibt das Ergebnis zurück`;
                 break;
             case 'method':
-                description = `Verarbeitet ${codeContext.functionName}`;
+                // Versuche aus Name zu erraten
+                if (name.toLowerCase().includes('get')) {
+                    description = `Liefert Daten zurück`;
+                } else if (name.toLowerCase().includes('set') || name.toLowerCase().includes('update')) {
+                    description = `Aktualisiert Daten`;
+                } else if (name.toLowerCase().includes('delete') || name.toLowerCase().includes('remove')) {
+                    description = `Entfernt Daten`;
+                } else if (name.toLowerCase().includes('create') || name.toLowerCase().includes('add')) {
+                    description = `Erstellt neue Daten`;
+                } else if (name.toLowerCase().includes('calculate') || name.toLowerCase().includes('compute')) {
+                    description = `Berechnet Werte`;
+                } else {
+                    description = `Verarbeitet ${name}-Operation`;
+                }
                 break;
             default:
-                description = `Implementiert ${codeContext.functionName}`;
+                description = `Implementiert ${name}`;
         }
+
+        console.log(`📝 Using fallback comment: "${description}"`);
 
         return {
             description,
-            details: 'Automatisch generierter Fallback-Kommentar',
+            details: 'Generated by fallback (Meta-text detected or API error)',
             confidence: 0.3
         };
     }
 
     /**
-     * Extrahiert reinen Text aus Kommentar (ohne Kommentar-Syntax)
+     * Extracts pure text from comment (without comment syntax)
      */
     private extractCommentText(comment: string): string {
         return comment
-            .replace(/\/\*\*|\*\/|\/\*|\*|\/\/|"""|'''/g, '') // Entferne Kommentar-Zeichen
-            .replace(/^\s+|\s+$/g, '') // Trim
-            .replace(/\n\s*/g, ' ') // Mehrzeilen zu einer Zeile
-            .substring(0, 150); // Max 150 Zeichen
+            .replace(/\/\*\*|\*\/|\/\*|\*|\/\/|"""|'''/g, '')
+            .replace(/^\s+|\s+$/g, '')
+            .replace(/\n\s*/g, ' ')
+            .substring(0, 150);
     }
 
     /**
-     * Generiert Cache-Key für Code-Kontext
+     * Generates cache key for code context
      */
     private generateCacheKey(codeContext: CodeContext): string {
         const codeHash = this.simpleHash(codeContext.code);
@@ -249,7 +263,7 @@ RICHTIG: "Führt die Authentifizierung durch und gibt ein Token zurück"`;
     }
 
     /**
-     * Einfacher Hash für Strings
+     * Simple hash for strings
      */
     private simpleHash(str: string): string {
         let hash = 0;
@@ -262,15 +276,13 @@ RICHTIG: "Führt die Authentifizierung durch und gibt ein Token zurück"`;
     }
 
     /**
-     * Holt OpenAI API Key aus SecretStorage
+     * Gets OpenAI API Key from SecretStorage
      */
     private async getApiKey(): Promise<string | undefined> {
-        // Versuche aus Environment Variable
         if (process.env.OPENAI_API_KEY) {
             return process.env.OPENAI_API_KEY;
         }
         
-        // Versuche aus VS Code Secret Storage
         try {
             const { ConfigManager } = await import('../utils/configManager');
             return await ConfigManager.getSecret('openAIApiKey');
@@ -280,11 +292,11 @@ RICHTIG: "Führt die Authentifizierung durch und gibt ein Token zurück"`;
     }
 
     /**
-     * Bereinigt Cache
+     * Clears cache
      */
     clearCache(): void {
         this.cache.clear();
-        console.log('🗑️ Cache cleared');
+        console.log('Cache cleared');
     }
 }
 

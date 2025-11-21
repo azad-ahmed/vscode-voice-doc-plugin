@@ -7,16 +7,13 @@ import { AutoDemoManager } from './utils/autoDemoManager';
 import { ConfigManager } from './utils/configManager';
 import { ApiUsageTracker } from './utils/apiUsageTracker';
 import { AutoCommentMonitor } from './utils/autoCommentMonitor';
-// ✨ NEU: Erweiterte Features
 import { LearningSystem } from './learning/learningSystem';
 import { CodeAnalyzer } from './analysis/codeAnalyzer';
 import { AutoModeController } from './automode/autoModeController';
 // 🧠 NEU: Adaptive Learning System
 import { VoiceDocLearning } from './learning/index';
 import { FeedbackUI } from './learning/feedbackUI';
-// ✨ NEU: Onboarding Manager
 import { OnboardingManager } from './onboarding/onboardingManager';
-// ✨ NEU: Hybrid Intelligence Manager (ersetzt alte Orchestratoren)
 import { HybridIntelligenceManager } from './offline-intelligence/hybridManager';
 
 let statusBarItem: vscode.StatusBarItem;
@@ -25,7 +22,6 @@ let commentGenerator: CommentGenerator;
 let voiceHandler: IntegratedVoiceHandler;
 let autoCommentMonitor: AutoCommentMonitor;
 let outputChannel: vscode.OutputChannel;
-// ✨ NEU: Erweiterte Services
 let learningSystem: LearningSystem;
 let codeAnalyzer: CodeAnalyzer;
 let autoModeController: AutoModeController;
@@ -40,12 +36,10 @@ export async function activate(context: vscode.ExtensionContext) {
     ErrorHandler.initialize(outputChannel);
     ConfigManager.initialize(context);
     
-    // ✨ NEU: Prüfe ob Onboarding nötig ist
     const onboardingCompleted = await OnboardingManager.checkAndRunOnboarding(context);
     if (onboardingCompleted) {
         ErrorHandler.log('Extension', '🎉 Onboarding erfolgreich abgeschlossen', 'success');
     }
-    // ✨ Demo-Modus Manager initialisieren
     await AutoDemoManager.checkAndInitialize(context);
     const isDemoMode = AutoDemoManager.isDemoMode(context);
     if (isDemoMode) {
@@ -66,7 +60,6 @@ export async function activate(context: vscode.ExtensionContext) {
         voiceHandler = new IntegratedVoiceHandler(context, commentGenerator);
         ErrorHandler.log('Extension', 'VoiceHandler initialisiert', 'success');
 
-        // ✨ NEU: Initialisiere erweiterte Features
         outputChannel.appendLine('Initialisiere erweiterte Features...');
         
         learningSystem = new LearningSystem(context);
@@ -123,7 +116,6 @@ export async function activate(context: vscode.ExtensionContext) {
             autoCommentMonitor.start();
         }
 
-        // ✨ NEU: Auto-Mode aus Config laden
         const autoMode = ConfigManager.get<boolean>('autoMode', false);
         if (autoMode) {
             autoModeController.enable();
@@ -184,7 +176,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ Auto-Mode Command (überwacht GESAMTES Projekt)
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.toggleAutoMode', async () => {
             try {
@@ -334,7 +325,6 @@ function registerCommands(context: vscode.ExtensionContext) {
     );
 
     
-    // ✨ Demo-Modus Commands
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.showDemoTutorial', async () => {
             try {
@@ -370,7 +360,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ NEU: Chaotische Kommentare bereinigen
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.cleanupComments', async () => {
             try {
@@ -381,7 +370,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ NEU: Onboarding zurücksetzen (für Testing)
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.resetOnboarding', async () => {
             try {
@@ -392,7 +380,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ NEU: Intelligente Kommentar-Analyse (ohne Einfügen)
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.analyzeCommentPlacement', async () => {
             try {
@@ -403,7 +390,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ NEU: AST-basierte Code-Struktur-Analyse
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.analyzeCodeStructure', async () => {
             try {
@@ -414,7 +400,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         })
     );
 
-    // ✨ NEU: Teste intelligente Platzierung
     context.subscriptions.push(
         vscode.commands.registerCommand('voiceDocPlugin.testIntelligentPlacement', async () => {
             try {

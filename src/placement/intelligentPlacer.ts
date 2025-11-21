@@ -1,6 +1,5 @@
 // src/placement/intelligentPlacer.ts
 // Intelligente Kommentar-Platzierung basierend auf AST-Analyse
-// ✨ Neu hinzugefügt für Diplomarbeit - Multi-Kriterien-Scoring-System
 
 import { ASTAnalyzer, CodeElement } from '../offline-intelligence/astAnalyzerAdapter';
 import * as vscode from 'vscode';

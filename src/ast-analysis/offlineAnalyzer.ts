@@ -1,21 +1,9 @@
 import * as vscode from 'vscode';
 import { ErrorHandler } from '../utils/errorHandler';
 
-/**
- * Intelligenter Code-Struktur-Analyzer (Offline-fähig)
- * 
- * Analysiert Code-Struktur OHNE externe APIs durch:
- * 1. VS Code's Symbol-Provider (Language Server)
- * 2. Regex-basierte Pattern-Erkennung
- * 3. Intelligente Heuristiken
- * 
- * Funktioniert für: TypeScript, JavaScript, Python, Java, C#, Go, Rust, PHP
- */
+
 export class OfflineCodeAnalyzer {
 
-    /**
-     * Analysiert Code-Struktur und findet optimale Kommentar-Position
-     */
     static async analyzeCodeStructure(
         document: vscode.TextDocument,
         position: vscode.Position
@@ -23,7 +11,7 @@ export class OfflineCodeAnalyzer {
         try {
             ErrorHandler.log('OfflineAnalyzer', '🔍 Analysiere Code-Struktur (offline)...');
 
-            // Methode 1: Nutze VS Code's Language Server (beste Qualität!)
+
             const symbolInfo = await this.getSymbolAtPosition(document, position);
             
             if (symbolInfo) {
@@ -31,14 +19,14 @@ export class OfflineCodeAnalyzer {
                 return this.createStructureFromSymbol(symbolInfo, document, position);
             }
 
-            // Methode 2: Fallback auf Regex-Analyse
+
             ErrorHandler.log('OfflineAnalyzer', '⚠️ Kein Symbol gefunden, nutze Regex-Analyse');
             return this.analyzeWithRegex(document, position);
 
         } catch (error: any) {
             ErrorHandler.handleError('OfflineAnalyzer.analyzeCodeStructure', error);
             
-            // Fallback: Sichere Platzierung
+
             return {
                 type: 'unknown',
                 name: 'Unbekannt',
@@ -51,15 +39,12 @@ export class OfflineCodeAnalyzer {
         }
     }
 
-    /**
-     * Nutzt VS Code's Symbol-Provider (Language Server Integration)
-     */
     private static async getSymbolAtPosition(
         document: vscode.TextDocument,
         position: vscode.Position
     ): Promise<SymbolInfo | null> {
         try {
-            // VS Code kann Symbole im Dokument finden
+
             const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
                 'vscode.executeDocumentSymbolProvider',
                 document.uri
@@ -69,7 +54,7 @@ export class OfflineCodeAnalyzer {
                 return null;
             }
 
-            // Finde Symbol an der aktuellen Position
+
             const symbol = this.findSymbolAtPosition(symbols, position);
             
             if (!symbol) {
@@ -89,33 +74,28 @@ export class OfflineCodeAnalyzer {
         }
     }
 
-    /**
-     * Findet Symbol an bestimmter Position (rekursiv durch Baum)
-     */
     private static findSymbolAtPosition(
         symbols: vscode.DocumentSymbol[],
         position: vscode.Position
     ): vscode.DocumentSymbol | null {
         for (const symbol of symbols) {
-            // Prüfe ob Position innerhalb dieses Symbols
+
             if (symbol.range.contains(position)) {
-                // Prüfe zuerst Kinder (spezifischer)
+
                 if (symbol.children && symbol.children.length > 0) {
                     const child = this.findSymbolAtPosition(symbol.children, position);
                     if (child) {
                         return child;
                     }
                 }
-                // Wenn kein spezifischeres Kind, nutze dieses Symbol
+
                 return symbol;
             }
         }
         return null;
     }
 
-    /**
-     * Konvertiert VS Code SymbolKind zu String
-     */
+
     private static symbolKindToString(kind: vscode.SymbolKind): string {
         const mapping: { [key: number]: string } = {
             [vscode.SymbolKind.Function]: 'function',
@@ -132,9 +112,7 @@ export class OfflineCodeAnalyzer {
         return mapping[kind] || 'unknown';
     }
 
-    /**
-     * Erstellt CodeStructureInfo aus VS Code Symbol
-     */
+
     private static createStructureFromSymbol(
         symbol: SymbolInfo,
         document: vscode.TextDocument,
@@ -150,7 +128,7 @@ export class OfflineCodeAnalyzer {
             insertLine: startLine,
             insertPosition: 'before',
             indentation: indentation,
-            confidence: 0.95, // Sehr hohe Konfidenz bei Symbol-Provider
+            confidence: 0.95,
             details: {
                 range: symbol.range,
                 selectionRange: symbol.selectionRange
@@ -158,9 +136,7 @@ export class OfflineCodeAnalyzer {
         };
     }
 
-    /**
-     * Regex-basierte Analyse als Fallback
-     */
+
     private static analyzeWithRegex(
         document: vscode.TextDocument,
         position: vscode.Position
@@ -168,7 +144,7 @@ export class OfflineCodeAnalyzer {
         const languageId = document.languageId;
         const currentLine = position.line;
         
-        // Suche nach Funktionen/Klassen in der Nähe (±10 Zeilen)
+
         const searchStart = Math.max(0, currentLine - 10);
         const searchEnd = Math.min(document.lineCount - 1, currentLine + 10);
 
@@ -179,13 +155,13 @@ export class OfflineCodeAnalyzer {
             const line = document.lineAt(i);
             const lineText = line.text;
             
-            // Prüfe verschiedene Pattern
+
             const matches = this.matchCodePatterns(lineText, languageId);
             
             for (const match of matches) {
                 const distance = Math.abs(i - currentLine);
                 
-                // Wähle nächstes Match
+
                 if (distance < minDistance) {
                     minDistance = distance;
                     bestMatch = {
@@ -195,13 +171,13 @@ export class OfflineCodeAnalyzer {
                         insertLine: i,
                         insertPosition: 'before',
                         indentation: line.firstNonWhitespaceCharacterIndex,
-                        confidence: 0.7 - (distance * 0.05) // Konfidenz sinkt mit Distanz
+                        confidence: 0.7 - (distance * 0.05)
                     };
                 }
             }
         }
 
-        // Fallback: Aktuelle Position
+
         if (!bestMatch) {
             const line = document.lineAt(currentLine);
             bestMatch = {
@@ -218,9 +194,7 @@ export class OfflineCodeAnalyzer {
         return bestMatch;
     }
 
-    /**
-     * Pattern-Matching für verschiedene Sprachen
-     */
+
     private static matchCodePatterns(
         line: string,
         languageId: string
@@ -239,9 +213,7 @@ export class OfflineCodeAnalyzer {
         return matches;
     }
 
-    /**
-     * Sprachspezifische Patterns
-     */
+
     private static getLanguagePatterns(languageId: string): LanguagePatterns {
         const patterns: { [key: string]: LanguagePatterns } = {
             'typescript': {
@@ -365,9 +337,7 @@ export class OfflineCodeAnalyzer {
         return patterns[languageId] || patterns['javascript'];
     }
 
-    /**
-     * Analysiert Code-Block-Struktur (verschachtelte Blöcke)
-     */
+
     static analyzeBlockStructure(
         document: vscode.TextDocument,
         startLine: number,
@@ -382,23 +352,23 @@ export class OfflineCodeAnalyzer {
             const text = line.text;
             const indent = line.firstNonWhitespaceCharacterIndex;
 
-            // Ignoriere leere Zeilen und Kommentare
+
             if (text.trim().length === 0 || this.isCommentLine(text)) {
                 continue;
             }
 
-            // Block beginnt
+
             if (text.includes('{')) {
                 const block: CodeBlock = {
                     startLine: i,
-                    endLine: -1, // Noch unbekannt
+                    endLine: -1,
                     indentation: indent,
                     type: this.detectBlockType(text, document.languageId)
                 };
                 blockStack.push(block);
             }
 
-            // Block endet
+
             if (text.includes('}')) {
                 if (blockStack.length > 0) {
                     const block = blockStack.pop()!;
@@ -408,7 +378,7 @@ export class OfflineCodeAnalyzer {
             }
         }
 
-        // Schließe offene Blöcke
+
         for (const block of blockStack) {
             block.endLine = endLine;
             blocks.push(block);
@@ -421,9 +391,7 @@ export class OfflineCodeAnalyzer {
         };
     }
 
-    /**
-     * Prüft ob Zeile ein Kommentar ist
-     */
+
     private static isCommentLine(line: string): boolean {
         const trimmed = line.trim();
         return (
@@ -436,9 +404,7 @@ export class OfflineCodeAnalyzer {
         );
     }
 
-    /**
-     * Erkennt Block-Typ
-     */
+
     private static detectBlockType(line: string, languageId: string): string {
         if (line.match(/class\s+/)) return 'class';
         if (line.match(/function\s+|def\s+|fn\s+/)) return 'function';
@@ -450,9 +416,7 @@ export class OfflineCodeAnalyzer {
     }
 }
 
-/**
- * Symbol-Information von VS Code
- */
+
 interface SymbolInfo {
     name: string;
     kind: string;
@@ -460,23 +424,19 @@ interface SymbolInfo {
     selectionRange: vscode.Range;
 }
 
-/**
- * Code-Struktur-Information
- */
+
 export interface CodeStructureInfo {
-    type: string;              // function, class, method, etc.
-    name: string;              // Name des Elements
-    startLine: number;         // Zeile wo Element beginnt
-    insertLine: number;        // Wo Kommentar hin soll
-    insertPosition: 'before' | 'after'; // Vor oder nach
-    indentation: number;       // Einrückung
-    confidence: number;        // Konfidenz (0-1)
-    details?: any;             // Zusätzliche Details
+    type: string;
+    name: string;
+    startLine: number;
+    insertLine: number;
+    insertPosition: 'before' | 'after'; 
+    indentation: number;
+    confidence: number;
+    details?: any;
 }
 
-/**
- * Language Pattern Definition
- */
+
 interface LanguagePatterns {
     [key: string]: {
         regex: RegExp;
@@ -484,9 +444,7 @@ interface LanguagePatterns {
     };
 }
 
-/**
- * Code-Block Information
- */
+
 interface CodeBlock {
     startLine: number;
     endLine: number;
@@ -494,9 +452,7 @@ interface CodeBlock {
     type: string;
 }
 
-/**
- * Block-Struktur
- */
+
 interface BlockStructure {
     blocks: CodeBlock[];
     depth: number;

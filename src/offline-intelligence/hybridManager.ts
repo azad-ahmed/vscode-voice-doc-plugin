@@ -53,7 +53,6 @@ export class HybridIntelligenceManager {
                 return false;
             }
 
-            // 🔒 Validiere Position (doppelte Absicherung)
             const validatedPlacement = PositionValidator.validateAndCorrect(document, placement);
 
             // Validierung
@@ -256,7 +255,6 @@ export class HybridIntelligenceManager {
             reasoning: 'Fallback-Platzierung (AST-Analyse fehlgeschlagen)'
         };
         
-        // 🔒 Validiere auch Fallback-Platzierung!
         return PositionValidator.validateAndCorrect(document, fallbackPlacement);
     }
 

@@ -8,13 +8,6 @@ import { AdaptiveDebouncer, DebounceContext } from './adaptiveDebouncer';
 /**
  * 🚀 VERBESSERTER Project Monitor mit intelligenten Features
  * 
- * Neue Features:
- * ✅ Komplexitäts-Analyse
- * ✅ Qualitäts-Validierung
- * ✅ Adaptives Debouncing
- * ✅ Rate-Limiting
- * ✅ Bessere Pattern-Erkennung
- * ✅ Akzeptanz-Tracking
  */
 export class ImprovedProjectMonitor {
     private fileWatcher?: vscode.FileSystemWatcher;
@@ -205,7 +198,6 @@ export class ImprovedProjectMonitor {
                     continue;
                 }
                 
-                // ✨ NEUE: Komplexitäts-Analyse
                 const complexity = ComplexityAnalyzer.analyzeComplexity(
                     document,
                     item.startLine,
@@ -325,7 +317,6 @@ export class ImprovedProjectMonitor {
             // Analysiere mit CodeAnalyzer
             const analysis = await this.codeAnalyzer.analyzeCode(codeContext);
             
-            // ✨ NEUE: Qualitäts-Validierung
             const validation = CommentQualityValidator.validate(
                 analysis.description,
                 codeContext.code,

@@ -1,19 +1,19 @@
 import * as vscode from 'vscode';
 
 /**
- * 📊 Analysiert Code-Komplexität für intelligentere Auto-Kommentare
+ * Analyzes code complexity for intelligent auto-commenting decisions
  * 
- * Berechnet Komplexität basierend auf:
- * - Kontrollstrukturen (if, for, while, switch)
- * - Verschachtelungstiefe
- * - Anzahl der Parameter
- * - Codezeilen
- * - Logische Operatoren
+ * Calculates complexity based on:
+ * - Control structures (if, for, while, switch)
+ * - Nesting depth
+ * - Number of parameters
+ * - Lines of code
+ * - Logical operators
  */
 export class ComplexityAnalyzer {
     
     /**
-     * Analysiert Code-Komplexität eines Elements
+     * Analyzes code complexity of an element
      */
     static analyzeComplexity(
         document: vscode.TextDocument,
@@ -47,12 +47,11 @@ export class ComplexityAnalyzer {
     }
     
     /**
-     * Berechnet Zyklomatische Komplexität
+     * Calculates cyclomatic complexity
      */
     private static calculateCyclomaticComplexity(code: string): number {
-        let complexity = 1; // Basis-Pfad
+        let complexity = 1;
         
-        // Zähle Entscheidungspunkte
         complexity += (code.match(/\bif\s*\(/g) || []).length;
         complexity += (code.match(/\belse\s+if\s*\(/g) || []).length;
         complexity += (code.match(/\bfor\s*\(/g) || []).length;
@@ -60,13 +59,13 @@ export class ComplexityAnalyzer {
         complexity += (code.match(/\bcase\s+/g) || []).length;
         complexity += (code.match(/\bcatch\s*\(/g) || []).length;
         complexity += (code.match(/\bdo\s*{/g) || []).length;
-        complexity += (code.match(/\?\s*.*\s*:/g) || []).length; // Ternäre Operatoren
+        complexity += (code.match(/\?\s*.*\s*:/g) || []).length;
         
         return complexity;
     }
     
     /**
-     * Berechnet maximale Verschachtelungstiefe
+     * Calculates maximum nesting depth
      */
     private static calculateNestingDepth(code: string): number {
         let maxDepth = 0;
@@ -85,7 +84,7 @@ export class ComplexityAnalyzer {
     }
     
     /**
-     * Zählt Parameter einer Funktion
+     * Counts function parameters
      */
     private static countParameters(functionLine: string): number {
         const match = functionLine.match(/\(([^)]*)\)/);
@@ -98,14 +97,14 @@ export class ComplexityAnalyzer {
     }
     
     /**
-     * Zählt logische Operatoren (&&, ||)
+     * Counts logical operators
      */
     private static countLogicalOperators(code: string): number {
         return (code.match(/&&|\|\|/g) || []).length;
     }
     
     /**
-     * Zählt existierende Kommentare
+     * Counts existing comments
      */
     private static countComments(code: string): number {
         const singleLine = (code.match(/\/\/.*/g) || []).length;
@@ -114,10 +113,9 @@ export class ComplexityAnalyzer {
     }
     
     /**
-     * Berechnet Gesamt-Komplexität (0-100)
+     * Calculates total complexity score (0-100)
      */
     private static calculateTotalComplexity(metrics: ComplexityMetrics): number {
-        // Gewichtete Berechnung
         const weights = {
             cyclomatic: 10,
             nesting: 5,
@@ -133,36 +131,29 @@ export class ComplexityAnalyzer {
             (metrics.parameterCount * weights.params) +
             (metrics.logicalOperators * weights.logical);
         
-        // Normalisiere auf 0-100
         return Math.min(100, Math.round(score));
     }
     
     /**
-     * Entscheidet ob Code dokumentiert werden sollte
+     * Determines if code should be documented based on complexity
      */
     private static shouldDocument(complexity: number, metrics: ComplexityMetrics): boolean {
-        // Minimale Schwellwerte
-        const MIN_COMPLEXITY = 15; // Angepasst von 20 auf 15
+        const MIN_COMPLEXITY = 15;
         const MIN_LINES = 5;
         const MIN_PARAMS = 3;
         
-        // Dokumentiere wenn:
-        // 1. Komplexität über Schwellwert
         if (complexity >= MIN_COMPLEXITY) {
             return true;
         }
         
-        // 2. Viele Parameter (auch bei niedriger Komplexität)
         if (metrics.parameterCount >= MIN_PARAMS) {
             return true;
         }
         
-        // 3. Lange Funktion ohne Kommentare
         if (metrics.linesOfCode >= 20 && metrics.comments === 0) {
             return true;
         }
         
-        // 4. Hohe Verschachtelung
         if (metrics.nestingDepth >= 4) {
             return true;
         }
@@ -171,7 +162,7 @@ export class ComplexityAnalyzer {
     }
     
     /**
-     * Kategorisiert Komplexitätslevel
+     * Categorizes complexity level
      */
     private static getComplexityLevel(complexity: number): ComplexityLevel {
         if (complexity < 10) return 'trivial';
@@ -182,7 +173,7 @@ export class ComplexityAnalyzer {
     }
     
     /**
-     * Findet Ende des Code-Blocks
+     * Finds end of code block
      */
     private static findCodeBlockEnd(document: vscode.TextDocument, startLine: number): number {
         let braceCount = 0;
@@ -204,12 +195,11 @@ export class ComplexityAnalyzer {
             }
         }
         
-        // Fallback: Max 50 Zeilen
         return Math.min(startLine + 50, document.lineCount - 1);
     }
     
     /**
-     * Holt Code-Block als String
+     * Gets code block as string
      */
     private static getCodeBlock(
         document: vscode.TextDocument,
@@ -224,9 +214,6 @@ export class ComplexityAnalyzer {
     }
 }
 
-/**
- * Komplexitäts-Metriken
- */
 export interface ComplexityMetrics {
     cyclomaticComplexity: number;
     nestingDepth: number;
@@ -236,9 +223,6 @@ export interface ComplexityMetrics {
     comments: number;
 }
 
-/**
- * Komplexitäts-Analyse Ergebnis
- */
 export interface ComplexityResult {
     name: string;
     startLine: number;
@@ -249,7 +233,4 @@ export interface ComplexityResult {
     complexityLevel: ComplexityLevel;
 }
 
-/**
- * Komplexitätsstufen
- */
 export type ComplexityLevel = 'trivial' | 'low' | 'medium' | 'high' | 'very-high';

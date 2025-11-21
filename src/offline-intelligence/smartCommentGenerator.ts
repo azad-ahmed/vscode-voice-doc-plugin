@@ -52,7 +52,6 @@ export class SmartCommentGenerator {
     }
 
     /**
-     * Verbessert User-Input mit fachlichen Anpassungen
      */
     private static enhanceUserInput(input: string, structure: CodeStructure): string {
         let enhanced = input.trim();

@@ -7,14 +7,11 @@ import { ErrorHandler } from './utils/errorHandler';
 import { ConfigManager } from './utils/configManager';
 import { ApiUsageTracker } from './utils/apiUsageTracker';
 import { AudioQualityValidator } from './utils/audioQualityValidator';
-// ✨ NEU: AST-basierte intelligente Platzierung
 import { IntelligentCommentPlacer } from './placement/intelligentPlacer';
-// ✨ NEU: Hybrid Intelligence Manager für intelligente Platzierung
 import { HybridIntelligenceManager } from './offline-intelligence/hybridManager';
 
 /**
  * Verwaltet Audio-Aufnahme und Transkriptions-Workflow
- * ✨ Jetzt mit AST-basierter intelligenter Kommentar-Platzierung
  */
 export class IntegratedVoiceHandler {
     private generator: CommentGenerator;
@@ -24,14 +21,12 @@ export class IntegratedVoiceHandler {
     private context: vscode.ExtensionContext;
     private maxRecordingTimeMs: number = 30000;
     private recordingTimer: NodeJS.Timeout | null = null;
-    // ✨ NEU: Intelligenter Placer für AST-Analyse
     private intelligentPlacer: IntelligentCommentPlacer;
 
     constructor(context: vscode.ExtensionContext, generator: CommentGenerator) {
         this.context = context;
         this.generator = generator;
         this.recorder = new AudioRecorder();
-        // ✨ NEU: Initialisiere intelligenten Placer
         this.intelligentPlacer = new IntelligentCommentPlacer();
         
         this.initializeSTTProvider();
@@ -207,13 +202,11 @@ export class IntegratedVoiceHandler {
         } catch (error: any) {
             ErrorHandler.handleError('transcribeAndProcess', error);
             
-            // 🔒 Verhindere Promise Rejection ohne Handling
             return this.handleTranscriptionError(error, audioPath);
         }
     }
 
     /**
-     * 🔒 Behandelt Transkriptionsfehler mit User-Feedback
      */
     private async handleTranscriptionError(error: any, audioPath: string): Promise<void> {
         const retry = await vscode.window.showErrorMessage(
@@ -243,7 +236,6 @@ export class IntegratedVoiceHandler {
     }
 
     /**
-     * ✨ NEU: Nutzt AST-basierte intelligente Platzierung als ERSTEN Versuch
      * Fallback auf Claude AI und dann auf einfache Platzierung
      */
     private async processTranscribedText(text: string): Promise<void> {
@@ -264,7 +256,6 @@ export class IntegratedVoiceHandler {
         const useIntelligentPlacement = ConfigManager.get<boolean>('intelligentPlacement', true);
 
         if (useIntelligentPlacement) {
-            // ✨ NEU: Versuche ZUERST AST-basierte intelligente Platzierung
             try {
                 await vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,

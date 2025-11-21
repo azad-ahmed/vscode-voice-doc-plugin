@@ -1,20 +1,19 @@
 /**
- * ⏱️ Adaptiver Debouncer für intelligentes Timing
+ * Adaptive debouncer for intelligent timing
  * 
  * Features:
- * - Passt Wartezeit basierend auf Aktivität an
- * - Verhindert API-Overload
- * - Lernt aus Benutzerver halten
- * - Rate-Limiting
+ * - Adjusts wait time based on activity
+ * - Prevents API overload
+ * - Learns from user behavior
+ * - Rate limiting
  */
 export class AdaptiveDebouncer {
     private timers: Map<string, NodeJS.Timeout> = new Map();
     private activityHistory: Map<string, number[]> = new Map();
-    private baseDelay: number = 5000; // 5 Sekunden Standard
-    private minDelay: number = 3000; // Minimum 3 Sekunden
-    private maxDelay: number = 15000; // Maximum 15 Sekunden
+    private baseDelay: number = 5000;
+    private minDelay: number = 3000;
+    private maxDelay: number = 15000;
     
-    // Rate-Limiting
     private apiCallsInLastHour: number[] = [];
     private maxCallsPerHour: number = 30;
     
@@ -28,45 +27,38 @@ export class AdaptiveDebouncer {
     }
     
     /**
-     * Plant eine Aktion mit adaptiver Verzögerung
+     * Schedules an action with adaptive delay
      */
     debounce(
         key: string,
         action: () => Promise<void>,
         context?: DebounceContext
     ): void {
-        // Lösche existierenden Timer
         const existing = this.timers.get(key);
         if (existing) {
             clearTimeout(existing);
         }
         
-        // Berechne adaptive Verzögerung
         const delay = this.calculateDelay(key, context);
         
-        // Rate-Limiting Check
         if (this.isRateLimited()) {
-            console.log(`⏸️ Rate-Limit erreicht, verschiebe Aktion um ${delay}ms`);
+            console.log(`Rate limit reached, postponing action by ${delay}ms`);
         }
         
-        // Setze neuen Timer
         const timer = setTimeout(async () => {
             try {
-                // Rate-Limiting Check vor Ausführung
                 if (this.isRateLimited()) {
-                    console.log('⚠️ Rate-Limit überschritten, überspringe Aktion');
+                    console.log('Rate limit exceeded, skipping action');
                     return;
                 }
                 
-                // Führe Aktion aus
                 await action();
                 
-                // Tracking
                 this.recordActivity(key);
                 this.recordAPICall();
                 
             } catch (error) {
-                console.error(`Fehler in debounced action (${key}):`, error);
+                console.error(`Error in debounced action (${key}):`, error);
             } finally {
                 this.timers.delete(key);
             }
@@ -74,23 +66,21 @@ export class AdaptiveDebouncer {
         
         this.timers.set(key, timer);
         
-        console.log(`⏱️ Aktion "${key}" geplant in ${delay}ms`);
+        console.log(`Action "${key}" scheduled in ${delay}ms`);
     }
     
     /**
-     * Berechnet adaptive Verzögerung
+     * Calculates adaptive delay
      */
     private calculateDelay(key: string, context?: DebounceContext): number {
         let delay = this.baseDelay;
         
-        // 1. Basierend auf Aktivitäts-Historie
         const history = this.activityHistory.get(key) || [];
         if (history.length > 0) {
             const recentActivity = history.filter(
-                time => Date.now() - time < 60000 // Letzte Minute
+                time => Date.now() - time < 60000
             ).length;
             
-            // Mehr Aktivität = längere Wartezeit
             if (recentActivity > 5) {
                 delay *= 1.5;
             } else if (recentActivity > 10) {
@@ -98,53 +88,44 @@ export class AdaptiveDebouncer {
             }
         }
         
-        // 2. Basierend auf Code-Komplexität
         if (context?.complexity) {
-            // Komplexerer Code = längere Wartezeit (mehr Bedenkzeit)
             const complexityMultiplier = Math.min(2, 1 + (context.complexity / 50));
             delay *= complexityMultiplier;
         }
         
-        // 3. Basierend auf Änderungs-Typ
         if (context?.changeType === 'class') {
-            delay *= 1.3; // Klassen sind wichtiger, warte länger
+            delay *= 1.3;
         } else if (context?.changeType === 'function') {
             delay *= 1.1;
         }
         
-        // 4. Rate-Limiting Anpassung
         const recentCalls = this.getRecentAPICalls();
         if (recentCalls > this.maxCallsPerHour * 0.8) {
-            // Wenn nahe am Limit, verlangsame
             delay *= 1.5;
         }
         
-        // 5. Benutzer-Akzeptanz-Rate
         if (context?.acceptanceRate !== undefined) {
             if (context.acceptanceRate < 0.3) {
-                // Niedrige Akzeptanz = längere Wartezeit
                 delay *= 1.5;
             } else if (context.acceptanceRate > 0.7) {
-                // Hohe Akzeptanz = kann schneller sein
                 delay *= 0.8;
             }
         }
         
-        // Begrenze auf Min/Max
         delay = Math.max(this.minDelay, Math.min(this.maxDelay, delay));
         
         return Math.round(delay);
     }
     
     /**
-     * Prüft ob Rate-Limit erreicht ist
+     * Checks if rate limit is reached
      */
     private isRateLimited(): boolean {
         return this.getRecentAPICalls() >= this.maxCallsPerHour;
     }
     
     /**
-     * Holt Anzahl API-Calls in letzter Stunde
+     * Gets number of API calls in last hour
      */
     private getRecentAPICalls(): number {
         const oneHourAgo = Date.now() - (60 * 60 * 1000);
@@ -153,20 +134,19 @@ export class AdaptiveDebouncer {
     }
     
     /**
-     * Zeichnet API-Call auf
+     * Records an API call
      */
     private recordAPICall(): void {
         this.apiCallsInLastHour.push(Date.now());
     }
     
     /**
-     * Zeichnet Aktivität auf
+     * Records activity
      */
     private recordActivity(key: string): void {
         const history = this.activityHistory.get(key) || [];
         history.push(Date.now());
         
-        // Behalte nur letzte 20 Einträge
         if (history.length > 20) {
             history.shift();
         }
@@ -175,28 +155,28 @@ export class AdaptiveDebouncer {
     }
     
     /**
-     * Bricht eine geplante Aktion ab
+     * Cancels a scheduled action
      */
     cancel(key: string): void {
         const timer = this.timers.get(key);
         if (timer) {
             clearTimeout(timer);
             this.timers.delete(key);
-            console.log(`❌ Aktion "${key}" abgebrochen`);
+            console.log(`Action "${key}" cancelled`);
         }
     }
     
     /**
-     * Bricht alle geplanten Aktionen ab
+     * Cancels all scheduled actions
      */
     cancelAll(): void {
         this.timers.forEach(timer => clearTimeout(timer));
         this.timers.clear();
-        console.log('❌ Alle Aktionen abgebrochen');
+        console.log('All actions cancelled');
     }
     
     /**
-     * Gibt Statistiken zurück
+     * Gets statistics
      */
     getStatistics(): DebouncerStatistics {
         return {
@@ -209,7 +189,7 @@ export class AdaptiveDebouncer {
     }
     
     /**
-     * Berechnet durchschnittliche Verzögerung
+     * Calculates average delay
      */
     private calculateAverageDelay(): number {
         if (this.activityHistory.size === 0) {
@@ -230,13 +210,13 @@ export class AdaptiveDebouncer {
     }
     
     /**
-     * Setzt Konfiguration zurück
+     * Resets configuration
      */
     reset(): void {
         this.cancelAll();
         this.activityHistory.clear();
         this.apiCallsInLastHour = [];
-        console.log('🔄 Debouncer zurückgesetzt');
+        console.log('Debouncer reset');
     }
     
     /**
@@ -247,9 +227,6 @@ export class AdaptiveDebouncer {
     }
 }
 
-/**
- * Konfiguration für AdaptiveDebouncer
- */
 export interface AdaptiveConfig {
     baseDelay?: number;
     minDelay?: number;
@@ -257,9 +234,6 @@ export interface AdaptiveConfig {
     maxCallsPerHour?: number;
 }
 
-/**
- * Kontext für Debouncing-Entscheidung
- */
 export interface DebounceContext {
     complexity?: number;
     changeType?: 'class' | 'function' | 'method' | 'minor';
@@ -267,9 +241,6 @@ export interface DebounceContext {
     acceptanceRate?: number;
 }
 
-/**
- * Debouncer-Statistiken
- */
 export interface DebouncerStatistics {
     pendingActions: number;
     recentAPICalls: number;

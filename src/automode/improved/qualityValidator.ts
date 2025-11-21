@@ -1,17 +1,17 @@
 /**
- * 🔍 Validiert Qualität von generierten Kommentaren
+ * Validates quality of generated comments
  * 
- * Prüft:
- * - Länge und Informationsgehalt
- * - Keine Meta-Beschreibungen
- * - Keine Redundanz mit Code
- * - Sinnvoller Inhalt
- * - Sprachqualität
+ * Checks:
+ * - Length and information content
+ * - No meta-descriptions
+ * - No redundancy with code
+ * - Meaningful content
+ * - Language quality
  */
 export class CommentQualityValidator {
     
     /**
-     * Validiert einen generierten Kommentar
+     * Validates a generated comment
      */
     static validate(
         comment: string,
@@ -22,51 +22,45 @@ export class CommentQualityValidator {
         const issues: ValidationIssue[] = [];
         let score = 100;
         
-        // 1. Längen-Checks
         const lengthIssues = this.checkLength(comment);
         issues.push(...lengthIssues);
         score -= lengthIssues.length * 10;
         
-        // 2. Meta-Beschreibungen vermeiden
         const metaIssues = this.checkMetaDescriptions(comment);
         issues.push(...metaIssues);
         score -= metaIssues.length * 15;
         
-        // 3. Redundanz mit Code
         const redundancyScore = this.checkRedundancy(comment, code, functionName);
         if (redundancyScore > 0.5) {
             issues.push({
                 type: 'redundancy',
                 severity: 'medium',
-                message: 'Kommentar wiederholt nur den Code',
-                suggestion: 'Erkläre das "Warum" und "Was", nicht das "Wie"'
+                message: 'Comment repeats code',
+                suggestion: 'Explain the "why" and "what", not the "how"'
             });
             score -= 25;
         }
         
-        // 4. Erklärt Zweck/Grund?
         if (!this.explainsWhy(comment)) {
             issues.push({
                 type: 'missing-why',
                 severity: 'low',
-                message: 'Kommentar erklärt nicht das "Warum"',
-                suggestion: 'Füge Kontext hinzu: Warum existiert diese Funktion?'
+                message: 'Comment does not explain "why"',
+                suggestion: 'Add context: Why does this function exist?'
             });
             score -= 10;
         }
         
-        // 5. Generischer Inhalt
         if (this.isGeneric(comment, functionName)) {
             issues.push({
                 type: 'generic',
                 severity: 'high',
-                message: 'Kommentar ist zu generisch',
-                suggestion: 'Sei spezifischer über die Funktion'
+                message: 'Comment is too generic',
+                suggestion: 'Be more specific about the function'
             });
             score -= 20;
         }
         
-        // 6. Sprach-Qualität
         const languageIssues = this.checkLanguageQuality(comment);
         issues.push(...languageIssues);
         score -= languageIssues.length * 5;
@@ -82,7 +76,7 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Prüft Kommentar-Länge
+     * Checks comment length
      */
     private static checkLength(comment: string): ValidationIssue[] {
         const issues: ValidationIssue[] = [];
@@ -92,8 +86,8 @@ export class CommentQualityValidator {
             issues.push({
                 type: 'too-short',
                 severity: 'high',
-                message: 'Kommentar zu kurz (< 20 Zeichen)',
-                suggestion: 'Füge mehr Details hinzu'
+                message: 'Comment too short (< 20 characters)',
+                suggestion: 'Add more details'
             });
         }
         
@@ -101,8 +95,8 @@ export class CommentQualityValidator {
             issues.push({
                 type: 'too-long',
                 severity: 'medium',
-                message: 'Kommentar zu lang (> 300 Zeichen)',
-                suggestion: 'Kürze auf wesentliche Information'
+                message: 'Comment too long (> 300 characters)',
+                suggestion: 'Keep to essential information'
             });
         }
         
@@ -110,23 +104,23 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Prüft auf Meta-Beschreibungen
+     * Checks for meta-descriptions
      */
     private static checkMetaDescriptions(comment: string): ValidationIssue[] {
         const issues: ValidationIssue[] = [];
         const lower = comment.toLowerCase();
         
         const metaPhrases = [
-            'dieser code',
-            'diese funktion',
-            'diese methode',
-            'dieser abschnitt',
-            'hier wird',
-            'es wird',
-            'dies ist',
-            'das ist eine funktion',
-            'diese klasse',
-            'dieser block'
+            'this code',
+            'this function',
+            'this method',
+            'this section',
+            'here we',
+            'it does',
+            'this is',
+            'this is a function',
+            'this class',
+            'this block'
         ];
         
         for (const phrase of metaPhrases) {
@@ -134,10 +128,10 @@ export class CommentQualityValidator {
                 issues.push({
                     type: 'meta-description',
                     severity: 'high',
-                    message: `Enthält Meta-Phrase: "${phrase}"`,
-                    suggestion: 'Beschreibe direkt was der Code tut, nicht dass es Code ist'
+                    message: `Contains meta phrase: "${phrase}"`,
+                    suggestion: 'Describe directly what the code does, not that it is code'
                 });
-                break; // Nur ein Issue für Meta-Beschreibungen
+                break;
             }
         }
         
@@ -145,20 +139,17 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Berechnet Redundanz mit Code (0-1)
+     * Calculates redundancy with code (0-1)
      */
     private static checkRedundancy(comment: string, code: string, functionName: string): number {
-        // Normalisiere beide Texte
         const normalizedComment = this.normalize(comment);
         const normalizedCode = this.normalize(code);
         const normalizedFunctionName = this.normalize(functionName);
         
-        // Wenn Kommentar nur Funktionsname ist
         if (normalizedComment === normalizedFunctionName) {
             return 1.0;
         }
         
-        // Berechne Überlappung der Wörter
         const commentWords = new Set(normalizedComment.split(/\s+/).filter(w => w.length > 3));
         const codeWords = new Set(normalizedCode.split(/\s+/).filter(w => w.length > 3));
         
@@ -177,39 +168,27 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Prüft ob Kommentar das "Warum" erklärt
+     * Checks if comment explains "why"
      */
     private static explainsWhy(comment: string): boolean {
         const lower = comment.toLowerCase();
         
         const whyIndicators = [
-            'weil', 'damit', 'um zu', 'deshalb', 'daher', 'dafür',
-            'zweck', 'ziel', 'grund', 'benötigt', 'erforderlich',
-            'ermöglicht', 'verhindert', 'vermeidet', 'sichert',
-            'gewährleistet', 'garantiert', 'stellt sicher',
-            // Englisch
             'because', 'to', 'for', 'since', 'ensures', 'prevents',
-            'enables', 'guarantees', 'purpose', 'goal', 'reason'
+            'enables', 'guarantees', 'purpose', 'goal', 'reason',
+            'needed', 'required', 'necessary'
         ];
         
         return whyIndicators.some(indicator => lower.includes(indicator));
     }
     
     /**
-     * Prüft ob Kommentar zu generisch ist
+     * Checks if comment is too generic
      */
     private static isGeneric(comment: string, functionName: string): boolean {
         const lower = comment.toLowerCase();
         
         const genericPhrases = [
-            'funktion',
-            'methode',
-            'führt aus',
-            'macht etwas',
-            'verarbeitet daten',
-            'behandelt',
-            'kümmert sich um',
-            // Englisch
             'function',
             'method',
             'does something',
@@ -217,7 +196,6 @@ export class CommentQualityValidator {
             'processes'
         ];
         
-        // Wenn Kommentar hauptsächlich generische Phrasen enthält
         const words = lower.split(/\s+/);
         const genericCount = words.filter(word => 
             genericPhrases.some(phrase => phrase.includes(word))
@@ -227,29 +205,27 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Prüft Sprach-Qualität
+     * Checks language quality
      */
     private static checkLanguageQuality(comment: string): ValidationIssue[] {
         const issues: ValidationIssue[] = [];
         
-        // Doppelte Leerzeichen
         if (comment.includes('  ')) {
             issues.push({
                 type: 'double-spaces',
                 severity: 'low',
-                message: 'Enthält doppelte Leerzeichen',
-                suggestion: 'Formatierung korrigieren'
+                message: 'Contains double spaces',
+                suggestion: 'Fix formatting'
             });
         }
         
-        // Endet nicht mit Punkt/Fragezeichen/Ausrufezeichen
         const cleaned = this.cleanComment(comment);
         if (cleaned.length > 0 && !/[.!?]$/.test(cleaned.trim())) {
             issues.push({
                 type: 'missing-punctuation',
                 severity: 'low',
-                message: 'Satz endet nicht mit Satzzeichen',
-                suggestion: 'Füge abschließendes Satzzeichen hinzu'
+                message: 'Sentence does not end with punctuation',
+                suggestion: 'Add closing punctuation'
             });
         }
         
@@ -257,26 +233,26 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Gibt Empfehlung basierend auf Score
+     * Gets recommendation based on score
      */
     private static getRecommendation(score: number, issues: ValidationIssue[]): string {
         if (score >= 80) {
-            return 'Gute Qualität - Kommentar kann verwendet werden';
+            return 'Good quality - comment can be used';
         }
         
         if (score >= 60) {
-            return 'Akzeptable Qualität - Kleinere Verbesserungen möglich';
+            return 'Acceptable quality - minor improvements possible';
         }
         
         if (score >= 40) {
-            return 'Niedrige Qualität - Überarbeitung empfohlen';
+            return 'Low quality - revision recommended';
         }
         
-        return 'Schlechte Qualität - Kommentar sollte neu generiert werden';
+        return 'Poor quality - comment should be regenerated';
     }
     
     /**
-     * Bereinigt Kommentar von Syntax
+     * Cleans comment from syntax
      */
     private static cleanComment(comment: string): string {
         return comment
@@ -290,7 +266,7 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Normalisiert Text für Vergleich
+     * Normalizes text for comparison
      */
     private static normalize(text: string): string {
         return text
@@ -301,7 +277,7 @@ export class CommentQualityValidator {
     }
     
     /**
-     * Verbessert einen Kommentar basierend auf Issues
+     * Improves a comment based on issues
      */
     static improve(comment: string, issues: ValidationIssue[]): string {
         let improved = comment;
@@ -325,9 +301,6 @@ export class CommentQualityValidator {
     }
 }
 
-/**
- * Validierungs-Ergebnis
- */
 export interface ValidationResult {
     isValid: boolean;
     score: number;
@@ -335,9 +308,6 @@ export interface ValidationResult {
     recommendation: string;
 }
 
-/**
- * Validierungs-Problem
- */
 export interface ValidationIssue {
     type: string;
     severity: 'low' | 'medium' | 'high';

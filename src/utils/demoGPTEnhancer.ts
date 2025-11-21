@@ -5,7 +5,6 @@
 export class DemoGPTEnhancer {
     
     /**
-     * Verbessert Text wie GPT es tun würde - für Demo-Zwecke
      */
     public static enhanceComment(originalText: string, codeContext?: string): string {
         // Bereinige zuerst den Text

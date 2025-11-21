@@ -22,7 +22,6 @@ export class PreciseCommentInserter {
         placement: CommentPlacement
     ): Promise<boolean> {
         try {
-            // 🔒 KRITISCH: Validiere und korrigiere Position VOR dem Einfügen!
             const validatedPlacement = PositionValidator.validateAndCorrect(
                 editor.document,
                 placement

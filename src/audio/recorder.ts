@@ -10,10 +10,8 @@ export class AudioRecorder {
     private audioFilePath: string = '';
     private tempDir: string;
     
-    // 🔒 Race Condition Prevention
     private cleanupLock: boolean = false;
     
-    // 🔒 Whitelist für erlaubte Audio-Geräte (Command Injection Prevention)
     private static readonly ALLOWED_DEVICES = [
         'Microphone',
         'Default',
@@ -48,7 +46,6 @@ export class AudioRecorder {
     }
 
     /**
-     * 🔒 SICHERHEIT: Validiert Gerätenamen gegen Whitelist
      */
     private sanitizeDeviceName(device: string): string {
         if (!AudioRecorder.ALLOWED_DEVICES.includes(device)) {
@@ -141,7 +138,6 @@ export class AudioRecorder {
     }
 
     private async tryFFmpegRecording(): Promise<void> {
-        // 🔒 SICHERHEIT: Validiere Gerätename BEVOR er verwendet wird
         const deviceName = 'Microphone'; // Standard-Gerät
         const sanitizedDevice = this.sanitizeDeviceName(deviceName);
         
@@ -158,7 +154,6 @@ export class AudioRecorder {
     }
 
     private async trySoxRecording(): Promise<void> {
-        // 🔒 SICHERHEIT: Nur statische Parameter
         this.recordingProcess = spawn('sox', [
             '-d',
             '-r', '16000',
@@ -353,7 +348,6 @@ export class AudioRecorder {
     }
 
     async cleanup(): Promise<void> {
-        // 🔒 KRITISCH: Race Condition Prevention
         if (this.cleanupLock) {
             ErrorHandler.log('AudioRecorder', 'Cleanup bereits aktiv, überspringe');
             return;
@@ -374,7 +368,6 @@ export class AudioRecorder {
         } catch (error) {
             ErrorHandler.log('AudioRecorder', `Cleanup Fehler: ${error}`);
         } finally {
-            // 🔒 Lock IMMER freigeben (auch bei Fehler)
             this.cleanupLock = false;
         }
     }

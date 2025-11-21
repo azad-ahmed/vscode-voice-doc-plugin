@@ -1,9 +1,20 @@
 import * as vscode from 'vscode';
 import { CodeAnalyzer, CodeContext } from '../analysis/codeAnalyzer';
 import { LearningSystem } from '../learning/learningSystem';
+import { CommentValidator } from './commentValidator';
+import { BatchManager } from './batchManager';
+import { PositionValidator } from '../intelligent-placement/positionValidator';
+import { CommentPlacement } from '../intelligent-placement/claudeAnalyzer';
 
 /**
+ * 🔧 VERBESSERTER Project Monitor
+ * 
  * Überwacht das gesamte Projekt und dokumentiert automatisch neue Klassen und Funktionen
+ * 
+ * NEUE FEATURES:
+ * - Batch-Support: Verhindert mehrere Kommentare an derselben Position
+ * - Position-Validierung vor dem Einfügen
+ * - Intelligente Platzierung auch bei bereits vorhandenen Kommentaren
  */
 export class ProjectMonitor {
     private fileWatcher?: vscode.FileSystemWatcher;
@@ -11,12 +22,13 @@ export class ProjectMonitor {
     private analysisQueue: Map<string, NodeJS.Timeout> = new Map();
     private processedFunctions: Set<string> = new Set();
     
-    // 🔒 Lock-System um mehrfache Analysen zu verhindern
     private runningAnalyses: Set<string> = new Set();
     private analysisLock: boolean = false;
-    private activeNotifications: Set<string> = new Set(); // Verhindert duplicate Notifications
+    private activeNotifications: Set<string> = new Set();
     
-    // ✨ Erweiterte Statistiken
+    // 🆕 Batch-Verwaltung für Kommentar-Einfügungen
+    private currentBatchDocument?: string;
+    
     private totalDetections: number = 0;
     private documentsProcessed: Set<string> = new Set();
     private suggestionsAccepted: number = 0;
@@ -51,13 +63,8 @@ export class ProjectMonitor {
     start(): void {
         console.log('🔍 Starte Projekt-Überwachung...');
         
-        // Überwache neue Dateien
         this.watchNewFiles();
-        
-        // Überwache Änderungen in allen offenen Dateien
         this.monitorOpenDocuments();
-        
-        // Analysiere alle geöffneten Dateien initial
         this.scanAllOpenDocuments();
         
         vscode.window.showInformationMessage(
@@ -71,17 +78,14 @@ export class ProjectMonitor {
     stop(): void {
         console.log('⏹️ Stoppe Projekt-Überwachung...');
         
-        // File Watcher stoppen
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
             this.fileWatcher = undefined;
         }
         
-        // Alle Document Listener stoppen
         this.documentChangeListeners.forEach(listener => listener.dispose());
         this.documentChangeListeners.clear();
         
-        // Timeouts clearen
         this.analysisQueue.forEach(timeout => clearTimeout(timeout));
         this.analysisQueue.clear();
         
@@ -92,20 +96,16 @@ export class ProjectMonitor {
      * Überwacht neue Dateien im Workspace
      */
     private watchNewFiles(): void {
-        // Erstelle FileSystemWatcher für Code-Dateien
         const pattern = '**/*.{ts,js,tsx,jsx,py,java,cs,go,rs,cpp,c,h}';
         this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
 
-        // Neue Datei erstellt
         this.fileWatcher.onDidCreate(async (uri) => {
             console.log(`📄 Neue Datei erkannt: ${uri.fsPath}`);
             await this.analyzeNewFile(uri);
         });
 
-        // Datei geändert
         this.fileWatcher.onDidChange(async (uri) => {
             console.log(`📝 Datei geändert: ${uri.fsPath}`);
-            // Warte kurz, dann analysiere
             this.scheduleAnalysis(uri);
         });
 
@@ -116,16 +116,13 @@ export class ProjectMonitor {
      * Überwacht alle offenen Dokumente
      */
     private monitorOpenDocuments(): void {
-        // Überwache Text-Änderungen
         const changeListener = vscode.workspace.onDidChangeTextDocument(async (event) => {
             const uri = event.document.uri.toString();
             
-            // Ignoriere nicht-Code-Dateien
             if (!this.isCodeFile(event.document)) {
                 return;
             }
 
-            // Prüfe auf neue Klassen/Funktionen
             const changes = event.contentChanges;
             for (const change of changes) {
                 if (this.looksLikeNewClassOrFunction(change.text)) {
@@ -139,7 +136,6 @@ export class ProjectMonitor {
         this.documentChangeListeners.set('textChange', changeListener);
         this.context.subscriptions.push(changeListener);
 
-        // Überwache neu geöffnete Dokumente
         const openListener = vscode.workspace.onDidOpenTextDocument(async (document) => {
             if (this.isCodeFile(document)) {
                 console.log(`📖 Dokument geöffnet: ${document.fileName}`);
@@ -155,7 +151,6 @@ export class ProjectMonitor {
      * Scannt alle aktuell geöffneten Dokumente
      */
     private async scanAllOpenDocuments(): Promise<void> {
-        // 🔒 Verhindere parallele Initial-Scans
         if (this.analysisLock) {
             console.log('⏭️ Initial-Scan läuft bereits, überspringe...');
             return;
@@ -171,7 +166,6 @@ export class ProjectMonitor {
             for (const document of documents) {
                 if (this.isCodeFile(document)) {
                     await this.analyzeDocument(document);
-                    // Kurze Pause zwischen Dokumenten um System nicht zu überlasten
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
             }
@@ -198,13 +192,11 @@ export class ProjectMonitor {
     private scheduleAnalysis(uri: vscode.Uri): void {
         const key = uri.toString();
         
-        // Clear existing timeout
         const existing = this.analysisQueue.get(key);
         if (existing) {
             clearTimeout(existing);
         }
 
-        // Schedule new analysis
         const timeout = setTimeout(async () => {
             try {
                 const document = await vscode.workspace.openTextDocument(uri);
@@ -214,71 +206,85 @@ export class ProjectMonitor {
             } finally {
                 this.analysisQueue.delete(key);
             }
-        }, 3000); // 3 Sekunden Debounce (erhöht für bessere Stabilität)
+        }, 3000);
 
         this.analysisQueue.set(key, timeout);
     }
 
     /**
-     * Analysiert ein komplettes Dokument und findet undokumentierte Klassen/Funktionen
+     * 🔧 VERBESSERT: Analysiert ein komplettes Dokument mit Batch-Support
      */
     private async analyzeDocument(document: vscode.TextDocument): Promise<void> {
         const docKey = document.uri.toString();
         
-        // 🔒 Prüfe ob bereits eine Analyse läuft für dieses Dokument
         if (this.runningAnalyses.has(docKey)) {
             console.log(`⏭️ Überspringe ${document.fileName} - Analyse läuft bereits`);
             return;
         }
         
-        // 🔒 Markiere als laufend
         this.runningAnalyses.add(docKey);
+        
+        // 🆕 Starte Batch für dieses Dokument
+        PositionValidator.startBatch(docKey);
+        this.currentBatchDocument = docKey;
         
         try {
             console.log(`🔎 Analysiere Dokument: ${document.fileName}`);
             
-            // ✨ Track processed document
             this.documentsProcessed.add(document.uri.toString());
             
             const text = document.getText();
-        const languageId = document.languageId;
+            const languageId = document.languageId;
 
-        // Finde alle Klassen
-        const classes = this.findClasses(text, languageId);
-        console.log(`  📦 Gefunden: ${classes.length} Klassen`);
+            const classes = this.findClasses(text, languageId);
+            console.log(`  📦 Gefunden: ${classes.length} Klassen`);
 
-        // Finde alle Funktionen
-        const functions = this.findFunctions(text, languageId);
-        console.log(`  ⚡ Gefunden: ${functions.length} Funktionen`);
+            const functions = this.findFunctions(text, languageId);
+            console.log(`  ⚡ Gefunden: ${functions.length} Funktionen`);
 
-        // Analysiere und dokumentiere undokumentierte Items
-        for (const item of [...classes, ...functions]) {
-            const itemKey = `${document.uri.toString()}:${item.name}:${item.line}`;
+            // Sammle alle undokumentierten Items
+            const undocumentedItems = [];
+
+            for (const item of [...classes, ...functions]) {
+                const itemKey = `${document.uri.toString()}:${item.name}:${item.line}`;
+                
+                if (this.processedFunctions.has(itemKey)) {
+                    continue;
+                }
+
+                if (this.isAlreadyDocumented(document, item.line)) {
+                    this.processedFunctions.add(itemKey);
+                    continue;
+                }
+
+                undocumentedItems.push(item);
+            }
+
+            // 🆕 Zeige Batch-Info
+            if (undocumentedItems.length > 0) {
+                console.log(`📝 ${undocumentedItems.length} neue undokumentierte Elemente gefunden`);
+                
+                // Verarbeite Items nacheinander mit Batch-Support
+                for (const item of undocumentedItems) {
+                    const itemKey = `${document.uri.toString()}:${item.name}:${item.line}`;
+                    await this.autoDocumentItem(document, item);
+                    this.processedFunctions.add(itemKey);
+                }
+            }
             
-            // Skip wenn bereits verarbeitet
-            if (this.processedFunctions.has(itemKey)) {
-                continue;
-            }
-
-            // Prüfe ob bereits dokumentiert
-            if (this.isAlreadyDocumented(document, item.line)) {
-                this.processedFunctions.add(itemKey);
-                continue;
-            }
-
-            // Analysiere und dokumentiere
-            await this.autoDocumentItem(document, item);
-            this.processedFunctions.add(itemKey);
-        }
-        
         } finally {
-            // 🔓 Lock freigeben
+            // 🆕 Beende Batch
+            // Warte kurz bevor Batch beendet wird, falls noch Einfügungen ausstehen
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            PositionValidator.endBatch(docKey);
+            this.currentBatchDocument = undefined;
+            
             this.runningAnalyses.delete(docKey);
         }
     }
 
     /**
-     * Findet alle Klassen im Code - NUR echte Klassendefinitionen
+     * Findet alle Klassen im Code
      */
     private findClasses(text: string, languageId: string): Array<{name: string; line: number; type: 'class'}> {
         const classes: Array<{name: string; line: number; type: 'class'}> = [];
@@ -287,7 +293,6 @@ export class ProjectMonitor {
         lines.forEach((line, index) => {
             const trimmedLine = line.trim();
             
-            // Skip Kommentare
             if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || 
                 trimmedLine.startsWith('*') || trimmedLine.startsWith('#')) {
                 return;
@@ -298,20 +303,16 @@ export class ProjectMonitor {
             switch (languageId) {
                 case 'typescript':
                 case 'javascript':
-                    // NUR: class ClassName { (mit optionalem export/abstract am Anfang)
                     match = line.match(/^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Z]\w*)\s*(?:extends\s+\w+)?\s*{/);
                     break;
                 case 'python':
-                    // NUR: class ClassName: oder class ClassName(...):
                     match = line.match(/^\s*class\s+([A-Z]\w*)(?:\s*\(.*?\))?\s*:/);
                     break;
                 case 'java':
                 case 'csharp':
-                    // NUR: [modifier] class ClassName {
                     match = line.match(/^\s*(?:public|private|protected)?\s*(?:abstract|static)?\s*class\s+([A-Z]\w*)\s*(?:extends\s+\w+)?(?:implements\s+[\w,\s]+)?\s*{/);
                     break;
                 case 'go':
-                    // NUR: type StructName struct
                     match = line.match(/^\s*type\s+([A-Z]\w*)\s+struct\s*{/);
                     break;
             }
@@ -322,7 +323,7 @@ export class ProjectMonitor {
                     line: index,
                     type: 'class'
                 });
-                this.totalDetections++; // ✨ Track detection
+                this.totalDetections++;
             }
         });
 
@@ -330,7 +331,7 @@ export class ProjectMonitor {
     }
 
     /**
-     * Findet alle Funktionen im Code - NUR echte Funktionsdefinitionen
+     * Findet alle Funktionen im Code
      */
     private findFunctions(text: string, languageId: string): Array<{name: string; line: number; type: 'function'}> {
         const functions: Array<{name: string; line: number; type: 'function'}> = [];
@@ -339,7 +340,6 @@ export class ProjectMonitor {
         lines.forEach((line, index) => {
             const trimmedLine = line.trim();
             
-            // Skip Kommentare
             if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || 
                 trimmedLine.startsWith('*') || trimmedLine.startsWith('#')) {
                 return;
@@ -350,37 +350,30 @@ export class ProjectMonitor {
             switch (languageId) {
                 case 'typescript':
                 case 'javascript':
-                    // 1. function functionName() {
                     if (!match) {
                         match = line.match(/^\s*(?:export\s+)?(?:async\s+)?function\s+([a-z_$][\w$]*)\s*\(/);
                     }
-                    // 2. const/let/var functionName = function() {
                     if (!match) {
                         match = line.match(/^\s*(?:const|let|var)\s+([a-z_$][\w$]*)\s*=\s*(?:async\s+)?function\s*\(/);
                     }
-                    // 3. const/let/var functionName = (...) =>
                     if (!match) {
                         match = line.match(/^\s*(?:const|let|var)\s+([a-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/);
                     }
-                    // 4. async methodName() { oder methodName() { (Klassen-Methoden mit Modifier)
                     if (!match && (line.includes('async ') || line.includes('static '))) {
                         match = line.match(/^\s*(?:async|static)\s+([a-z_$][\w$]*)\s*\(/);
                     }
                     break;
 
                 case 'python':
-                    // def function_name(:
                     match = line.match(/^\s*(?:async\s+)?def\s+([a-z_][\w]*)\s*\(/);
                     break;
 
                 case 'java':
                 case 'csharp':
-                    // [modifier] returnType methodName(...)
                     match = line.match(/^\s*(?:public|private|protected)\s+(?:static\s+)?(?:async\s+)?\w+\s+([a-z_$][\w$]*)\s*\(/);
                     break;
 
                 case 'go':
-                    // func functionName(...) {
                     match = line.match(/^\s*func\s+(?:\(\w+\s+\*?\w+\)\s+)?([a-z_][\w]*)\s*\(/);
                     break;
             }
@@ -388,14 +381,13 @@ export class ProjectMonitor {
             if (match) {
                 const functionName = match[1];
                 
-                // Validierung: Nur echte Funktionsnamen
                 if (this.isValidFunctionName(functionName, languageId)) {
                     functions.push({
                         name: functionName,
                         line: index,
                         type: 'function'
                     });
-                    this.totalDetections++; // ✨ Track detection
+                    this.totalDetections++;
                 }
             }
         });
@@ -407,7 +399,6 @@ export class ProjectMonitor {
      * Validiert ob ein Name ein echter Funktionsname ist
      */
     private isValidFunctionName(name: string, languageId: string): boolean {
-        // JavaScript/TypeScript Keywords ausschließen
         const jsKeywords = [
             'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'catch', 'try',
             'return', 'throw', 'break', 'continue', 'typeof', 'instanceof',
@@ -423,7 +414,6 @@ export class ProjectMonitor {
             }
         }
 
-        // Python Keywords
         const pythonKeywords = [
             'if', 'elif', 'else', 'for', 'while', 'break', 'continue', 'pass',
             'return', 'yield', 'import', 'from', 'as', 'try', 'except', 'finally',
@@ -436,7 +426,6 @@ export class ProjectMonitor {
             }
         }
 
-        // Name muss mit Buchstabe oder _ beginnen
         return /^[a-z_$][\w$]*$/i.test(name);
     }
 
@@ -446,10 +435,8 @@ export class ProjectMonitor {
     private isAlreadyDocumented(document: vscode.TextDocument, line: number): boolean {
         if (line === 0) return false;
 
-        // Prüfe die vorherige Zeile
         const previousLine = document.lineAt(line - 1).text.trim();
         
-        // Prüfe auch 2 Zeilen davor (für mehrzeilige Kommentare)
         let twoLinesBefore = '';
         if (line >= 2) {
             twoLinesBefore = document.lineAt(line - 2).text.trim();
@@ -476,30 +463,23 @@ export class ProjectMonitor {
     ): Promise<void> {
         const notificationKey = `${document.uri.toString()}:${item.name}:${item.line}`;
         
-        // 🔒 Prüfe ob bereits eine Notification für dieses Item aktiv ist
         if (this.activeNotifications.has(notificationKey)) {
             console.log(`⏭️ Überspringe Notification für ${item.name} - bereits aktiv`);
             return;
         }
         
-        // Markiere als aktiv
         this.activeNotifications.add(notificationKey);
         
         try {
-            // Erstelle Code-Kontext
             const codeContext = this.createCodeContext(document, item);
-
-            // Analysiere mit CodeAnalyzer
             const analysis = await this.codeAnalyzer.analyzeCode(codeContext);
 
-            // Prüfe Konfidenz
             const minConfidence = this.getMinConfidence();
             if (analysis.confidence < minConfidence) {
                 console.log(`⚠️ Niedrige Konfidenz (${analysis.confidence}) für ${item.name}, überspringe...`);
                 return;
             }
 
-            // Zeige Notification mit Optionen
             const action = await vscode.window.showInformationMessage(
                 `📝 ${item.type === 'class' ? 'Klasse' : 'Funktion'} "${item.name}" dokumentieren? (${Math.round(analysis.confidence * 100)}%)`,
                 { modal: false },
@@ -517,7 +497,6 @@ export class ProjectMonitor {
         } catch (error) {
             console.error(`Fehler beim Auto-Dokumentieren von ${item.name}:`, error);
         } finally {
-            // 🔓 Notification-Lock freigeben
             this.activeNotifications.delete(notificationKey);
         }
     }
@@ -545,7 +524,7 @@ export class ProjectMonitor {
     }
 
     /**
-     * Fügt Dokumentation ein
+     * 🔧 VERBESSERT: Fügt Dokumentation mit Position-Validierung ein
      */
     private async insertDocumentation(
         document: vscode.TextDocument,
@@ -554,56 +533,57 @@ export class ProjectMonitor {
         codeContext: CodeContext,
         confidence: number
     ): Promise<void> {
-        const comment = this.formatComment(description, document.languageId);
-        
-        // Öffne das Dokument in einem Editor
-        const editor = await vscode.window.showTextDocument(document, { preview: false });
-        
-        // 🔒 Validiere Position (prüfe ob wir wirklich VOR der Funktion einfügen)
-        const targetLine = document.lineAt(line);
-        const targetText = targetLine.text.trim();
-        
-        // Wenn Zeile eine Funktionsdefinition ist, muss Kommentar DAVOR
-        let insertLine = line;
-        if (this.isFunctionOrClassStart(targetText, document.languageId)) {
-            // Gut - einfügen davor
-        } else {
-            // Suche nach Funktionsbeginn
-            for (let i = line; i < Math.min(line + 5, document.lineCount); i++) {
-                const checkLine = document.lineAt(i).text.trim();
-                if (this.isFunctionOrClassStart(checkLine, document.languageId)) {
-                    insertLine = i;
-                    break;
-                }
-            }
+        try {
+            // 🆕 Erstelle Placement-Objekt
+            let placement: CommentPlacement = {
+                comment: description,
+                targetLine: line,
+                position: 'before',
+                indentation: 0,
+                reasoning: 'Auto-generated documentation'
+            };
+
+            // 🆕 Validiere und korrigiere Position
+            placement = PositionValidator.validateAndCorrect(document, placement, true);
+
+            // 🆕 Markiere Position als verwendet
+            PositionValidator.markPositionAsUsed(document.uri.toString(), placement.targetLine);
+
+            // Formatiere Kommentar
+            const comment = this.formatComment(description, document.languageId, placement.indentation);
+            
+            // Öffne das Dokument in einem Editor
+            const editor = await vscode.window.showTextDocument(document, { preview: false });
+            
+            // Füge Kommentar ein
+            await editor.edit(editBuilder => {
+                const insertPos = new vscode.Position(placement.targetLine, 0);
+                editBuilder.insert(insertPos, comment + '\n');
+            });
+
+            // Speichere für Learning System
+            this.learningSystem.addTrainingExample({
+                input: description,
+                output: comment,
+                codeContext: codeContext,
+                source: 'auto',
+                accepted: true,
+                confidence: confidence,
+                timestamp: Date.now()
+            });
+            
+            this.suggestionsAccepted++;
+
+            console.log(`✅ Dokumentation für "${codeContext.functionName}" an Zeile ${placement.targetLine} eingefügt`);
+
+        } catch (error) {
+            console.error(`Fehler beim Einfügen der Dokumentation:`, error);
+            vscode.window.showErrorMessage(`Fehler beim Einfügen der Dokumentation: ${error}`);
         }
-        
-        await editor.edit(editBuilder => {
-            const insertPos = new vscode.Position(insertLine, 0);
-            editBuilder.insert(insertPos, comment + '\n');
-        });
-
-        // Speichere für Learning System
-        this.learningSystem.addTrainingExample({
-            input: description,
-            output: comment,
-            codeContext: codeContext,
-            source: 'auto',
-            accepted: true,
-            confidence: confidence,
-            timestamp: Date.now()
-        });
-        
-        // ✨ Track accepted suggestion
-        this.suggestionsAccepted++;
-
-        vscode.window.showInformationMessage(
-            `✅ Dokumentation für "${codeContext.functionName}" eingefügt!`
-        );
     }
 
     /**
-     * Bearbeiten und dann Dokumentation einfügen
+     * 🔧 VERBESSERT: Bearbeiten und dann Dokumentation einfügen mit Position-Validierung
      */
     private async editAndInsertDocumentation(
         document: vscode.TextDocument,
@@ -619,56 +599,60 @@ export class ProjectMonitor {
         });
 
         if (edited) {
-            const comment = this.formatComment(edited, document.languageId);
-            
-            const editor = await vscode.window.showTextDocument(document, { preview: false });
-            
-            // 🔒 Validiere Position
-            let insertLine = line;
-            const targetLine = document.lineAt(line);
-            const targetText = targetLine.text.trim();
-            
-            if (!this.isFunctionOrClassStart(targetText, document.languageId)) {
-                for (let i = line; i < Math.min(line + 5, document.lineCount); i++) {
-                    const checkLine = document.lineAt(i).text.trim();
-                    if (this.isFunctionOrClassStart(checkLine, document.languageId)) {
-                        insertLine = i;
-                        break;
-                    }
-                }
+            try {
+                // 🆕 Erstelle Placement-Objekt
+                let placement: CommentPlacement = {
+                    comment: edited,
+                    targetLine: line,
+                    position: 'before',
+                    indentation: 0,
+                    reasoning: 'User-edited documentation'
+                };
+
+                // 🆕 Validiere und korrigiere Position
+                placement = PositionValidator.validateAndCorrect(document, placement, true);
+
+                // 🆕 Markiere Position als verwendet
+                PositionValidator.markPositionAsUsed(document.uri.toString(), placement.targetLine);
+
+                // Formatiere Kommentar
+                const comment = this.formatComment(edited, document.languageId, placement.indentation);
+                
+                const editor = await vscode.window.showTextDocument(document, { preview: false });
+                
+                await editor.edit(editBuilder => {
+                    const insertPos = new vscode.Position(placement.targetLine, 0);
+                    editBuilder.insert(insertPos, comment + '\n');
+                });
+
+                this.learningSystem.addTrainingExample({
+                    input: description,
+                    output: comment,
+                    codeContext: codeContext,
+                    source: 'auto',
+                    accepted: true,
+                    edited: true,
+                    originalSuggestion: description,
+                    confidence: confidence,
+                    timestamp: Date.now()
+                });
+                
+                this.suggestionsAccepted++;
+
+                console.log(`✅ Bearbeitete Dokumentation für "${codeContext.functionName}" an Zeile ${placement.targetLine} eingefügt`);
+
+            } catch (error) {
+                console.error(`Fehler beim Einfügen der bearbeiteten Dokumentation:`, error);
+                vscode.window.showErrorMessage(`Fehler beim Einfügen: ${error}`);
             }
-            
-            await editor.edit(editBuilder => {
-                const insertPos = new vscode.Position(insertLine, 0);
-                editBuilder.insert(insertPos, comment + '\n');
-            });
-
-            this.learningSystem.addTrainingExample({
-                input: description,
-                output: comment,
-                codeContext: codeContext,
-                source: 'auto',
-                accepted: true,
-                edited: true,
-                originalSuggestion: description,
-                confidence: confidence,
-                timestamp: Date.now()
-            });
-            
-            // ✨ Track accepted suggestion
-            this.suggestionsAccepted++;
-
-            vscode.window.showInformationMessage(
-                `✅ Bearbeitete Dokumentation für "${codeContext.functionName}" eingefügt!`
-            );
         }
     }
 
     /**
-     * Formatiert Kommentar basierend auf Sprache
+     * 🔧 VERBESSERT: Formatiert Kommentar mit Einrückung
      */
-    private formatComment(text: string, languageId: string): string {
-        const indent = ''; // Wird automatisch beim Einfügen angepasst
+    private formatComment(text: string, languageId: string, indentSpaces: number = 0): string {
+        const indent = ' '.repeat(indentSpaces);
         
         switch (languageId) {
             case 'python':
@@ -678,7 +662,6 @@ export class ProjectMonitor {
             case 'typescript':
             case 'java':
             case 'csharp':
-                // Mehrzeilige Kommentare aufteilen
                 const lines = text.split('\n');
                 if (lines.length === 1) {
                     return `${indent}/** ${text} */`;
@@ -699,12 +682,10 @@ export class ProjectMonitor {
      * Prüft ob Text wie neue Klasse/Funktion aussieht
      */
     private looksLikeNewClassOrFunction(text: string): boolean {
-        // Nur bei substanziellen Änderungen triggern (> 30 Zeichen)
         if (text.length < 30) {
             return false;
         }
         
-        // Nur wenn komplette Zeile mit class oder function
         const hasClass = /^\s*(?:export\s+)?(?:abstract\s+)?class\s+[A-Z]\w*\s+/m.test(text);
         const hasFunction = /^\s*(?:export\s+)?(?:async\s+)?function\s+\w+\s*\(/m.test(text);
         const hasDef = /^\s*(?:async\s+)?def\s+\w+\s*\(/m.test(text);
@@ -743,7 +724,6 @@ export class ProjectMonitor {
             queuedAnalyses: this.analysisQueue.size,
             activeNotifications: this.activeNotifications.size,
             monitoredDocuments: this.documentChangeListeners.size,
-            // ✨ Neue Statistiken
             totalDetections: this.totalDetections,
             documentsProcessed: this.documentsProcessed.size,
             suggestionsAccepted: this.suggestionsAccepted

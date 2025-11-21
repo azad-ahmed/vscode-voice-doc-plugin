@@ -2,7 +2,6 @@ import { STTProvider } from '../types';
 import * as path from 'path';
 
 /**
- * Verbesserter Demo-Provider mit kontextbasierten, realistischen Transkriptionen
  * Perfekt für Diplomarbeit-Tests und Demonstrationen ohne API-Keys
  */
 export class EnhancedDemoProvider implements STTProvider {

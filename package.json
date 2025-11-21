@@ -284,15 +284,20 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "compile:tests": "tsc -p ./tsconfig.test.json",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node ./out/test/runTest.js",
+    "pretest": "npm run compile:tests",
+    "test": "node ./out/test/runTest.js",
+    "test:unit": "npm run pretest && mocha ./out/test/unit/**/*.test.js",
     "lint": "eslint src --ext ts",
-    "security-audit": "npm audit && npm outdated"
+    "security-audit": "npm audit && npm outdated",
+    "fix:install": "node install-fixes.js",
+    "fix:validate": "tsc --noEmit"
   },
   "dependencies": {
     "@azure/core-auth": "^1.5.0",
-    "@typescript-eslint/typescript-estree": "^8.14.0",
     "@typescript-eslint/types": "^8.14.0",
+    "@typescript-eslint/typescript-estree": "^8.14.0",
     "axios": "^1.12.2",
     "form-data": "^4.0.4",
     "microsoft-cognitiveservices-speech-sdk": "^1.46.0"
@@ -308,6 +313,7 @@
     "@vscode/test-electron": "^2.3.0",
     "eslint": "^9.0.0",
     "eslint-plugin-security": "^3.0.1",
+    "glob": "^11.1.0",
     "mocha": "^10.8.2",
     "sinon": "^21.0.0",
     "typescript": "^5.7.2"

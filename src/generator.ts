@@ -6,7 +6,6 @@ import { DemoGPTEnhancer } from './utils/demoGPTEnhancer';
 import { RateLimiter } from './utils/rateLimiter';
 
 /**
- * 🔒 Configuration Constants
  */
 const API_CONFIG = {
     OPENAI: {
@@ -38,7 +37,6 @@ export class CommentGenerator {
     private openAIApiKey?: string;
     private requestTimeout: number = API_CONFIG.TIMEOUT.REQUEST_MS;
     
-    // 🔒 Rate Limiter
     private rateLimiter: RateLimiter;
 
     constructor(language: string = 'auto') {
@@ -85,13 +83,11 @@ export class CommentGenerator {
     }
 
     public async enhanceWithOpenAI(transcript: string, codeContext: string | null): Promise<string> {
-        // 🔒 Verwende Demo-GPT-Enhancer wenn kein API-Key vorhanden
         if (!this.openAIApiKey) {
             ErrorHandler.log('CommentGenerator', 'Nutze Demo-GPT-Verbesserung');
             return DemoGPTEnhancer.enhanceComment(transcript, codeContext || '');
         }
         
-        // 🔒 KRITISCH: Rate Limit Check
         try {
             await this.rateLimiter.checkLimit();
         } catch (error: any) {
@@ -100,7 +96,6 @@ export class CommentGenerator {
             return DemoGPTEnhancer.enhanceComment(transcript, codeContext || '');
         }
         
-        // 🔒 Input Sanitization
         const sanitizedTranscript = this.sanitizeInput(transcript);
         const sanitizedContext = codeContext ? this.sanitizeInput(codeContext) : null;
         
@@ -143,7 +138,6 @@ export class CommentGenerator {
                 timeout: this.requestTimeout
             };
 
-            // 🔒 Besseres Timeout-Handling
             let timeoutHandle: NodeJS.Timeout;
             let hasTimedOut = false;
             let isResolved = false;
@@ -187,7 +181,6 @@ export class CommentGenerator {
                             const response = JSON.parse(data);
                             let enhancedText = response.choices?.[0]?.message?.content || sanitizedTranscript;
                             
-                            // 🔒 Bereinige OpenAI Antwort
                             enhancedText = this.cleanOpenAIResponse(enhancedText);
                             
                             safeResolve(enhancedText.trim());
@@ -219,7 +212,6 @@ export class CommentGenerator {
                 }
             });
 
-            // 🔒 Timeout mit Cleanup
             timeoutHandle = setTimeout(() => {
                 hasTimedOut = true;
                 req.destroy();
@@ -237,7 +229,6 @@ export class CommentGenerator {
     }
 
     /**
-     * 🔒 KRITISCH: Input Sanitization
      * Verhindert XSS, Code Injection und validiert Länge
      */
     private sanitizeInput(text: string): string {
@@ -265,12 +256,9 @@ export class CommentGenerator {
     }
 
     /**
-     * 🔒 Bereinigt OpenAI Antwort von Code-Blöcken und Markdown
-     * ✅ VERBESSERT: Robustere Regex-Patterns, Längen-Limitierung
      */
     private cleanOpenAIResponse(text: string): string {
         // Entferne ALLE Code-Blöcke (javascript, typescript, python, etc.)
-        // ✅ NEU: Case-insensitive und alle Sprachen
         text = text.replace(/```[a-z]*\s*([\s\S]*?)```/gi, '$1');
         
         // Entferne Markdown Bold/Italic (non-greedy)
@@ -282,10 +270,8 @@ export class CommentGenerator {
         // Entferne überflüssige Leerzeilen
         text = text.replace(/\n{3,}/g, '\n\n');
         
-        // 🔒 NEU: Entferne führende/trailing Whitespace
         text = text.trim();
         
-        // 🔒 NEU: Begrenze auf maximale Länge (verhindert zu lange Kommentare)
         if (text.length > API_CONFIG.VALIDATION.MAX_COMMENT_LENGTH) {
             text = text.substring(0, API_CONFIG.VALIDATION.MAX_COMMENT_LENGTH - 3) + '...';
         }
@@ -465,7 +451,6 @@ export class CommentGenerator {
     public async setOpenAIApiKey(apiKey: string): Promise<void> {
         await ConfigManager.setSecret('openAIApiKey', apiKey);
         this.openAIApiKey = apiKey;
-        // 🔒 SICHERHEIT: Logge NIEMALS den API Key
         ErrorHandler.log('CommentGenerator', 'API Provider konfiguriert', 'success');
     }
 
@@ -478,14 +463,12 @@ export class CommentGenerator {
     }
 
     /**
-     * 🔒 Gibt Rate Limiter Statistik zurück
      */
     public getRateLimitStats() {
         return this.rateLimiter.getUsageStats();
     }
 
     /**
-     * 🔒 Setzt Rate Limiter zurück
      */
     public resetRateLimit(): void {
         this.rateLimiter.reset();

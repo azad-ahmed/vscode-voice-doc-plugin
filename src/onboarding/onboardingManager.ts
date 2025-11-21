@@ -339,7 +339,6 @@ export class OnboardingManager {
                     // Teste nochmal mit gleichem Key
                     return await this.setupOpenAI(context);
                 } else if (retry === 'Anderen Key eingeben') {
-                    // Neuen Key abfragen
                     return await this.setupOpenAI(context);
                 }
 
@@ -432,7 +431,6 @@ export class OnboardingManager {
                     // Teste nochmal mit gleicher Config
                     return await this.setupAzure(context);
                 } else if (retry === 'Andere Konfiguration') {
-                    // Neue Config abfragen
                     return await this.setupAzure(context);
                 }
 

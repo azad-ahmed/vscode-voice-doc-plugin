@@ -6,6 +6,9 @@ import { ErrorHandler } from '../utils/errorHandler';
 /**
  * Nutzt Claude API für intelligente Code-Analyse und Kommentar-Platzierung
  * 
+ * ⚠️ WICHTIG: Diese Funktionalität ist OPTIONAL
+ * Wenn kein Claude API Key vorhanden, wird automatisch auf AST-basierte Analyse zurückgefallen
+ * 
  * Dieser Service sendet Code an Claude (mich!) und erhält zurück:
  * 1. Den optimalen Kommentar-Text
  * 2. Die EXAKTE Position (Zeile) wo der Kommentar hin muss
@@ -16,6 +19,9 @@ export class ClaudeAnalyzer {
     private static readonly API_URL = 'https://api.anthropic.com/v1/messages';
     private static readonly MODEL = 'claude-sonnet-4-20250514';
     private static readonly MAX_TOKENS = 2000;
+    
+    // Flag zum einfachen Deaktivieren der Claude API
+    private static readonly ENABLED = false; // ⚠️ Auf true setzen um Claude API zu nutzen
 
     /**
      * Analysiert Code-Kontext und gibt intelligente Kommentar-Platzierung zurück
@@ -26,9 +32,15 @@ export class ClaudeAnalyzer {
         transcribedText: string
     ): Promise<CommentPlacement | null> {
         try {
-            const apiKey = await ConfigManager.getSecret('openAIApiKey');
+            // Prüfe ob Claude API aktiviert ist
+            if (!this.ENABLED) {
+                ErrorHandler.log('ClaudeAnalyzer', '⚠️ Claude API ist deaktiviert, nutze AST-Fallback');
+                return null;
+            }
+
+            const apiKey = await ConfigManager.getSecret('claudeApiKey');
             if (!apiKey) {
-                ErrorHandler.log('ClaudeAnalyzer', 'Kein OpenAI API Key vorhanden');
+                ErrorHandler.log('ClaudeAnalyzer', 'ℹ️ Kein Claude API Key vorhanden, nutze AST-Fallback');
                 return null;
             }
 
@@ -46,8 +58,9 @@ export class ClaudeAnalyzer {
             return placement;
 
         } catch (error: any) {
-            ErrorHandler.handleError('ClaudeAnalyzer.analyzeAndPlaceComment', error);
-            return null;
+            // Bei Fehler: Logge und gib null zurück (Fallback zu AST)
+            ErrorHandler.log('ClaudeAnalyzer', `⚠️ Claude API Fehler: ${error.message}, nutze AST-Fallback`);
+            return null; // Wichtig: null zurückgeben damit Fallback greift!
         }
     }
 
@@ -250,16 +263,7 @@ Analysiere jetzt den Code und gib NUR das JSON zurück, KEINE zusätzlichen Erkl
 
         } catch (error) {
             ErrorHandler.handleError('ClaudeAnalyzer.parseClaudeResponse', error);
-            
-            // Fallback: Nutze naive Platzierung
-            ErrorHandler.log('ClaudeAnalyzer', 'Fallback auf naive Platzierung');
-            return {
-                comment: claudeResponse,
-                targetLine: context.cursorLine,
-                position: 'before',
-                indentation: 0,
-                reasoning: 'Fallback-Platzierung'
-            };
+            throw error; // Werfe Fehler damit Fallback greift
         }
     }
 
@@ -267,11 +271,42 @@ Analysiere jetzt den Code und gib NUR das JSON zurück, KEINE zusätzlichen Erkl
      * Prüft ob Claude API verfügbar ist
      */
     static async isAvailable(): Promise<boolean> {
+        // Wenn deaktiviert, immer false zurückgeben
+        if (!this.ENABLED) {
+            return false;
+        }
+
         try {
-            const apiKey = await ConfigManager.getSecret('openAIApiKey');
+            const apiKey = await ConfigManager.getSecret('claudeApiKey');
             return !!apiKey;
         } catch {
             return false;
+        }
+    }
+
+    /**
+     * Konfiguriere Claude API Key
+     */
+    static async configureApiKey(): Promise<void> {
+        const apiKey = await vscode.window.showInputBox({
+            prompt: 'Claude API Key eingeben',
+            placeHolder: 'sk-ant-...',
+            password: true,
+            validateInput: (value) => {
+                if (!value || value.length < 10) {
+                    return 'API Key muss mindestens 10 Zeichen haben';
+                }
+                if (!value.startsWith('sk-ant-')) {
+                    return 'Claude API Key sollte mit "sk-ant-" beginnen';
+                }
+                return undefined;
+            }
+        });
+
+        if (apiKey) {
+            await ConfigManager.setSecret('claudeApiKey', apiKey);
+            vscode.window.showInformationMessage('✅ Claude API Key gespeichert!');
+            ErrorHandler.log('ClaudeAnalyzer', 'API Key konfiguriert', 'success');
         }
     }
 }

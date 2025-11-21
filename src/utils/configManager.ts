@@ -32,10 +32,11 @@ export class ConfigManager {
 
         ConfigManager.cache.set(fullKey, value);
         
-        // 🔒 Verhindere Memory Leak: LRU Cache-Limit
         if (ConfigManager.cache.size > ConfigManager.MAX_CACHE_SIZE) {
             const firstKey = ConfigManager.cache.keys().next().value;
-            ConfigManager.cache.delete(firstKey);
+            if (firstKey !== undefined) {
+                ConfigManager.cache.delete(firstKey);
+            }
         }
         
         return value;
@@ -88,7 +89,6 @@ export class ConfigManager {
                 // Versuche alte Config zu lesen (falls vorhanden)
                 const oldValue = ConfigManager.get<string>(key);
                 
-                // 🔒 SICHERHEIT: Validiere API Key Format
                 if (oldValue && ConfigManager.isValidApiKey(oldValue)) {
                     // 1. Speichere im SecretStorage
                     await ConfigManager.setSecret(key, oldValue);
@@ -111,7 +111,6 @@ export class ConfigManager {
     }
 
     /**
-     * 🔒 Validiert API Key Format
      */
     private static isValidApiKey(key: string): boolean {
         if (!key || key.trim().length === 0) return false;

@@ -3,22 +3,62 @@ import { CommentPlacement } from './claudeAnalyzer';
 import { ErrorHandler } from '../utils/errorHandler';
 
 /**
- * Position-Validator und Korrektor
+ * 🔧 VERBESSERTER Position-Validator mit Batch-Support
  * 
- * Verhindert Syntaxfehler durch:
+ * Verhindert Syntaxfehler und doppelte Platzierungen durch:
  * 1. Validierung der Kommentar-Position
  * 2. Automatische Korrektur bei Problemen
  * 3. Intelligente Erkennung von Funktions/Klassen-Grenzen
+ * 4. Batch-Awareness: Verhindert mehrere Kommentare an derselben Position
  */
 export class PositionValidator {
+    // 🆕 Track verwendete Positionen innerhalb eines Batches
+    private static usedPositions: Map<string, Set<number>> = new Map();
+
+    /**
+     * 🆕 Startet einen neuen Batch (löscht verwendete Positionen)
+     */
+    static startBatch(documentUri: string): void {
+        this.usedPositions.set(documentUri, new Set());
+        ErrorHandler.log('PositionValidator', `🆕 Neuer Batch gestartet für ${documentUri}`);
+    }
+
+    /**
+     * 🆕 Markiert eine Position als verwendet
+     */
+    static markPositionAsUsed(documentUri: string, line: number): void {
+        if (!this.usedPositions.has(documentUri)) {
+            this.usedPositions.set(documentUri, new Set());
+        }
+        this.usedPositions.get(documentUri)!.add(line);
+        ErrorHandler.log('PositionValidator', `✅ Position ${line} als verwendet markiert`);
+    }
+
+    /**
+     * 🆕 Prüft ob Position bereits verwendet wurde
+     */
+    static isPositionUsed(documentUri: string, line: number): boolean {
+        return this.usedPositions.get(documentUri)?.has(line) || false;
+    }
+
+    /**
+     * 🆕 Beendet einen Batch (optional)
+     */
+    static endBatch(documentUri: string): void {
+        this.usedPositions.delete(documentUri);
+        ErrorHandler.log('PositionValidator', `✅ Batch beendet für ${documentUri}`);
+    }
 
     /**
      * Validiert und korrigiert eine Kommentar-Platzierung
+     * 🔧 VERBESSERT: Berücksichtigt bereits verwendete Positionen im Batch
      */
     static validateAndCorrect(
         document: vscode.TextDocument,
-        placement: CommentPlacement
+        placement: CommentPlacement,
+        respectBatchPositions: boolean = true
     ): CommentPlacement {
+        const documentUri = document.uri.toString();
         ErrorHandler.log('PositionValidator', `Validiere Position: Zeile ${placement.targetLine}, ${placement.position}`);
 
         // 1. Prüfe ob Zeile existiert
@@ -48,25 +88,45 @@ export class PositionValidator {
             const correctedLine = this.findFunctionStart(document, placement.targetLine);
             
             if (correctedLine !== null) {
-                ErrorHandler.log('PositionValidator', `✅ Korrigiert: ${placement.targetLine} → ${correctedLine}`);
+                ErrorHandler.log('PositionValidator', `Funktionsstart gefunden: ${correctedLine}`);
                 placement.targetLine = correctedLine;
                 placement.position = 'before';
                 placement.reasoning = 'Automatisch korrigiert: Funktionsstart gefunden';
             }
         }
 
-        // 4. Prüfe ob bereits Kommentar vorhanden
-        if (this.hasCommentBefore(document, placement.targetLine)) {
-            ErrorHandler.log('PositionValidator', '⚠️ Kommentar bereits vorhanden, suche alternative Position...');
-            // Füge NACH vorhandenem Kommentar ein (überschreibe ihn)
-            const nextLine = this.skipExistingComments(document, placement.targetLine);
-            if (nextLine !== placement.targetLine) {
-                placement.targetLine = nextLine;
-                placement.reasoning = 'Nach vorhandenem Kommentar platziert';
+        // 4. 🆕 Prüfe ob Position bereits im Batch verwendet wurde
+        if (respectBatchPositions && this.isPositionUsed(documentUri, placement.targetLine)) {
+            ErrorHandler.log('PositionValidator', `⚠️ Position ${placement.targetLine} bereits im Batch verwendet, suche alternative...`);
+            
+            // Suche nächste freie Position (nicht nach oben, sondern bleibe bei der eigentlichen Funktion!)
+            const alternativeLine = this.findAlternativePosition(document, placement.targetLine, documentUri);
+            
+            if (alternativeLine !== null) {
+                ErrorHandler.log('PositionValidator', `✅ Alternative Position gefunden: ${placement.targetLine} → ${alternativeLine}`);
+                placement.targetLine = alternativeLine;
+                placement.reasoning = 'Alternative Position wegen Batch-Konflikt';
+            } else {
+                ErrorHandler.log('PositionValidator', '⚠️ Keine alternative Position gefunden, behalte Original');
             }
         }
 
-        // 5. Korrigiere Einrückung
+        // 5. Prüfe ob bereits Kommentar vorhanden (aber überschreibe NICHT)
+        if (this.hasCommentBefore(document, placement.targetLine)) {
+            ErrorHandler.log('PositionValidator', `⚠️ Kommentar bereits vorhanden bei Zeile ${placement.targetLine}`);
+            
+            // 🔧 WICHTIG: Suche die EIGENTLICHE Funktion für diesen Kommentar
+            const actualFunctionLine = this.findNextFunction(document, placement.targetLine);
+            
+            if (actualFunctionLine !== null && actualFunctionLine !== placement.targetLine) {
+                ErrorHandler.log('PositionValidator', `✅ Eigentliche Funktion gefunden: ${actualFunctionLine}`);
+                placement.targetLine = actualFunctionLine;
+                placement.position = 'before';
+                placement.reasoning = 'Korrigiert zu eigentlicher Funktionsdefinition';
+            }
+        }
+
+        // 6. Korrigiere Einrückung
         const correctIndentation = this.getCorrectIndentation(document, placement.targetLine);
         if (correctIndentation !== placement.indentation) {
             ErrorHandler.log('PositionValidator', `🔧 Einrückung korrigiert: ${placement.indentation} → ${correctIndentation}`);
@@ -76,6 +136,70 @@ export class PositionValidator {
         ErrorHandler.log('PositionValidator', `✅ Validierte Position: Zeile ${placement.targetLine}, ${placement.position}, Einrückung ${placement.indentation}`, 'success');
 
         return placement;
+    }
+
+    /**
+     * 🆕 Findet alternative Position wenn die gewünschte bereits belegt ist
+     * WICHTIG: Sucht NICHT nach oben, sondern bleibt in der Nähe der Original-Position
+     */
+    private static findAlternativePosition(
+        document: vscode.TextDocument,
+        originalLine: number,
+        documentUri: string
+    ): number | null {
+        // 🔧 NEUE STRATEGIE: Wenn Position belegt ist, gib die Original-Position zurück
+        // aber nur wenn sie WIRKLICH die richtige Funktionsdefinition ist
+        
+        // Prüfe ob originalLine tatsächlich eine Funktionsdefinition ist
+        const lineText = document.lineAt(originalLine).text.trim();
+        if (this.isFunctionOrClassStart(lineText, document.languageId)) {
+            // Das ist eine echte Funktion - behalte diese Position, auch wenn schon ein Kommentar da ist
+            // Der Benutzer muss dann entscheiden, ob er überschreiben will
+            return originalLine;
+        }
+
+        // Wenn nicht, suche die nächste Funktionsdefinition nach unten (maximal 10 Zeilen)
+        for (let i = originalLine + 1; i < Math.min(originalLine + 10, document.lineCount); i++) {
+            const line = document.lineAt(i).text.trim();
+            
+            // Skip leere Zeilen und Kommentare
+            if (line.length === 0 || this.isCommentLine(line)) {
+                continue;
+            }
+            
+            if (this.isFunctionOrClassStart(line, document.languageId)) {
+                // Prüfe ob diese Position frei ist
+                if (!this.isPositionUsed(documentUri, i)) {
+                    return i;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 🆕 Findet die nächste Funktionsdefinition nach der aktuellen Position
+     */
+    private static findNextFunction(
+        document: vscode.TextDocument,
+        startLine: number
+    ): number | null {
+        // Suche nach unten nach der nächsten Funktionsdefinition (maximal 15 Zeilen)
+        for (let i = startLine + 1; i < Math.min(startLine + 15, document.lineCount); i++) {
+            const lineText = document.lineAt(i).text.trim();
+            
+            // Skip leere Zeilen und Kommentare
+            if (lineText.length === 0 || this.isCommentLine(lineText)) {
+                continue;
+            }
+            
+            if (this.isFunctionOrClassStart(lineText, document.languageId)) {
+                return i;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -109,16 +233,16 @@ export class PositionValidator {
         // Python
         if (languageId === 'python') {
             return (
-                /^\s*(?:async\s+)?def\s+\w+\s*\(/.test(line) ||  // def function_name(
-                /^\s*class\s+\w+/.test(line)                      // class ClassName
+                /^\s*(?:async\s+)?def\s+\w+\s*\(/.test(line) ||  
+                /^\s*class\s+\w+/.test(line)                      
             );
         }
 
         // Java/C#
         if (languageId === 'java' || languageId === 'csharp') {
             return (
-                /^\s*(?:public|private|protected)\s+(?:static\s+)?(?:async\s+)?\w+\s+\w+\s*\(/.test(line) || // method
-                /^\s*(?:public|private|protected)?\s*(?:abstract\s+)?class\s+\w+/.test(line)                  // class
+                /^\s*(?:public|private|protected)\s+(?:static\s+)?(?:async\s+)?\w+\s+\w+\s*\(/.test(line) ||
+                /^\s*(?:public|private|protected)?\s*(?:abstract\s+)?class\s+\w+/.test(line)                  
             );
         }
 
@@ -130,8 +254,8 @@ export class PositionValidator {
         // Rust
         if (languageId === 'rust') {
             return (
-                /^\s*(?:pub\s+)?fn\s+\w+/.test(line) ||  // fn function_name
-                /^\s*(?:pub\s+)?struct\s+\w+/.test(line)  // struct Name
+                /^\s*(?:pub\s+)?fn\s+\w+/.test(line) ||  
+                /^\s*(?:pub\s+)?struct\s+\w+/.test(line)  
             );
         }
 
@@ -200,26 +324,6 @@ export class PositionValidator {
     }
 
     /**
-     * Überspringt existierende Kommentare
-     */
-    private static skipExistingComments(document: vscode.TextDocument, line: number): number {
-        let currentLine = line;
-
-        // Gehe rückwärts durch Kommentar-Block
-        while (currentLine > 0) {
-            const lineText = document.lineAt(currentLine - 1).text.trim();
-            
-            if (this.isCommentLine(lineText)) {
-                currentLine--;
-            } else {
-                break;
-            }
-        }
-
-        return currentLine;
-    }
-
-    /**
      * Prüft ob Zeile ein Kommentar ist
      */
     private static isCommentLine(line: string): boolean {
@@ -280,6 +384,7 @@ export class PositionValidator {
         const isInsideBlock = this.isInsideCodeBlock(document, line);
         const hasComment = this.hasCommentBefore(document, line);
         const indentation = this.getCorrectIndentation(document, line);
+        const isUsed = this.isPositionUsed(document.uri.toString(), line);
 
         return `
 📊 Position-Diagnose für Zeile ${line}:
@@ -287,6 +392,7 @@ export class PositionValidator {
   Ist Funktionsstart: ${isFunctionStart ? '✅' : '❌'}
   Innerhalb Code-Block: ${isInsideBlock ? '⚠️ JA' : '✅ NEIN'}
   Hat Kommentar davor: ${hasComment ? '⚠️ JA' : '✅ NEIN'}
+  Bereits im Batch verwendet: ${isUsed ? '⚠️ JA' : '✅ NEIN'}
   Einrückung: ${indentation} Leerzeichen
         `.trim();
     }

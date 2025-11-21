@@ -8,7 +8,13 @@ import { LearningSystem } from '../learning/learningSystem';
 import { PositionValidator } from '../intelligent-placement/positionValidator';
 
 /**
- * Überwacht Code-Änderungen und generiert automatisch Kommentare
+ * Intelligenter Auto-Comment Monitor
+ * 
+ * ✨ INTELLIGENTE KOMMENTARE:
+ * - Analysiert Code automatisch beim Speichern
+ * - Generiert hochwertige KI-Kommentare mit Kontext
+ * - Vermeidet Duplikate intelligent
+ * - Nur einmalige Dokumentation pro Element
  */
 export class AutoCommentMonitor {
     private analyzer: CodeAnalyzer | null = null;
@@ -16,11 +22,11 @@ export class AutoCommentMonitor {
     private documentChangeListener?: vscode.Disposable;
     private documentSaveListener?: vscode.Disposable;
     private pendingChanges: Map<string, NodeJS.Timeout> = new Map();
-    private lastAnalyzedContent: Map<string, string> = new Map();
     
-    // 🔒 Lock-Systeme um mehrfache Benachrichtigungen zu verhindern
+    // Tracking für bereits dokumentierte Elemente
+    private documentedElements: Map<string, Set<string>> = new Map(); // URI -> Set<"className.methodName">
+    private lastProcessedHash: Map<string, string> = new Map(); // URI -> content hash
     private runningAnalyses: Set<string> = new Set();
-    private activeNotifications: Set<string> = new Set();
 
     constructor(
         generator: CommentGenerator,
@@ -28,7 +34,6 @@ export class AutoCommentMonitor {
     ) {
         this.generator = generator;
         
-        // CodeAnalyzer ist optional, nur wenn LearningSystem verfügbar ist
         if (learningSystem) {
             this.analyzer = new CodeAnalyzer(learningSystem);
         }
@@ -42,17 +47,13 @@ export class AutoCommentMonitor {
             return;
         }
 
-        ErrorHandler.log('AutoCommentMonitor', '🚀 Starte Code-Überwachung (verbessert)');
+        ErrorHandler.log('AutoCommentMonitor', '🚀 Starte intelligente Auto-Kommentierung');
 
         this.documentSaveListener = vscode.workspace.onDidSaveTextDocument(async (document) => {
             await this.onDocumentSaved(document);
         });
 
-        this.documentChangeListener = vscode.workspace.onDidChangeTextDocument((event) => {
-            this.onDocumentChanged(event);
-        });
-
-        ErrorHandler.log('AutoCommentMonitor', 'Code-Überwachung aktiv', 'success');
+        ErrorHandler.log('AutoCommentMonitor', 'Intelligente Kommentierung aktiv', 'success');
     }
 
     /**
@@ -72,7 +73,7 @@ export class AutoCommentMonitor {
         this.pendingChanges.forEach(timer => clearTimeout(timer));
         this.pendingChanges.clear();
 
-        ErrorHandler.log('AutoCommentMonitor', 'Code-Überwachung gestoppt');
+        ErrorHandler.log('AutoCommentMonitor', 'Auto-Kommentierung gestoppt');
     }
 
     /**
@@ -85,37 +86,21 @@ export class AutoCommentMonitor {
             return;
         }
 
-        ErrorHandler.log('AutoCommentMonitor', `Analysiere gespeicherte Datei: ${document.fileName}`);
-
-        try {
-            await this.analyzeAndComment(document, mode === 'on-save');
-        } catch (error) {
-            ErrorHandler.handleError('AutoCommentMonitor.onDocumentSaved', error, false);
-        }
-    }
-
-    /**
-     * Wird aufgerufen wenn ein Dokument geändert wird
-     */
-    private onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
-        const mode = ConfigManager.get<string>('autoCommentMode', 'off');
+        const uri = document.uri.toString();
         
-        if (mode !== 'on-type' || !this.shouldProcessDocument(event.document)) {
+        // Verhindere parallele Analysen
+        if (this.runningAnalyses.has(uri)) {
             return;
         }
 
-        const uri = event.document.uri.toString();
-        
-        if (this.pendingChanges.has(uri)) {
-            clearTimeout(this.pendingChanges.get(uri)!);
+        try {
+            this.runningAnalyses.add(uri);
+            await this.analyzeAndComment(document);
+        } catch (error) {
+            ErrorHandler.handleError('AutoCommentMonitor.onDocumentSaved', error, false);
+        } finally {
+            this.runningAnalyses.delete(uri);
         }
-
-        const timer = setTimeout(() => {
-            this.analyzeAndComment(event.document, false);
-            this.pendingChanges.delete(uri);
-        }, 5000); // 5 Sekunden Debounce (erhöht für bessere Stabilität)
-
-        this.pendingChanges.set(uri, timer);
     }
 
     /**
@@ -140,113 +125,84 @@ export class AutoCommentMonitor {
     }
 
     /**
-     * Analysiert Dokument und fügt fehlende Kommentare hinzu
+     * Analysiert Dokument und fügt intelligente Kommentare hinzu
      */
-    private async analyzeAndComment(document: vscode.TextDocument, showNotification: boolean): Promise<void> {
+    private async analyzeAndComment(document: vscode.TextDocument): Promise<void> {
         const uri = document.uri.toString();
+        const content = document.getText();
         
-        // 🔒 Prüfe ob bereits eine Analyse läuft
-        if (this.runningAnalyses.has(uri)) {
-            ErrorHandler.log('AutoCommentMonitor', `⏭️ Überspringe ${document.fileName} - Analyse läuft bereits`);
-            return;
-        }
+        // Hash berechnen (ohne Kommentare)
+        const contentHash = this.hashCode(content);
+        const lastHash = this.lastProcessedHash.get(uri);
         
-        // 🔒 Markiere als laufend
-        this.runningAnalyses.add(uri);
-        
-        try {
-            const currentContent = document.getText();
-            const lastContent = this.lastAnalyzedContent.get(uri);
-
-        if (lastContent === currentContent) {
+        // Wenn sich nichts geändert hat, nicht nochmal analysieren
+        if (lastHash === contentHash) {
             return;
         }
 
-        this.lastAnalyzedContent.set(uri, currentContent);
-
-        // Einfache Syntax-Analyse
-        const elements = this.simpleCodeAnalysis(currentContent, document.languageId);
+        const elements = this.analyzeCode(content, document.languageId);
         
-        // Filter undokumentierte Elemente
-        const uncommentedElements = elements.filter((el: CodeElement) => {
-            // Prüfe ob Element bereits einen Kommentar hat (vereinfachte Prüfung)
-            const lineAbove = el.startLine > 0 ? document.lineAt(el.startLine - 1).text : '';
-            return !lineAbove.trim().startsWith('//') && !lineAbove.trim().startsWith('/*');
-        });
+        // Filter: Nur undokumentierte Elemente
+        const uncommentedElements = this.filterUndocumented(elements, document, uri);
 
         if (uncommentedElements.length === 0) {
+            this.lastProcessedHash.set(uri, contentHash);
             return;
         }
 
         ErrorHandler.log(
             'AutoCommentMonitor',
-            `Gefunden: ${uncommentedElements.length} undokumentierte Code-Elemente`
+            `📝 ${uncommentedElements.length} neue undokumentierte Elemente gefunden`
         );
 
-        const minComplexity = ConfigManager.get<number>('autoCommentMinComplexity', 3) || 3;
+        const minComplexity = ConfigManager.get<number>('autoCommentMinComplexity', 5) || 5;
         const elementsToComment = uncommentedElements.filter((el: CodeElement) => 
             (el.complexity || 0) >= minComplexity
         );
 
         if (elementsToComment.length === 0) {
+            this.lastProcessedHash.set(uri, contentHash);
             return;
         }
-        
-        // 🔒 Prüfe ob bereits eine Notification aktiv ist
-        const notificationKey = `${uri}:batch`;
-        if (this.activeNotifications.has(notificationKey)) {
-            ErrorHandler.log('AutoCommentMonitor', '⏭️ Notification bereits aktiv, überspringe');
-            return;
-        }
-        
-        this.activeNotifications.add(notificationKey);
-        
-        try {
-            const action = await this.askUserForAction(elementsToComment.length);
 
-            if (action === 'comment-all') {
-                await this.commentAllElements(document, elementsToComment);
-                if (showNotification) {
-                    vscode.window.showInformationMessage(
-                        `✅ ${elementsToComment.length} Kommentare automatisch hinzugefügt`
-                    );
-                }
-            } else if (action === 'review') {
-                await this.reviewElements(document, elementsToComment);
-            }
-        } finally {
-            // 🔓 Notification-Lock freigeben
-            this.activeNotifications.delete(notificationKey);
-        }
+        // Max 5 Elemente pro Durchlauf
+        const limitedElements = elementsToComment.slice(0, 5);
         
-        } finally {
-            // 🔓 Analyse-Lock freigeben
-            this.runningAnalyses.delete(uri);
+        // Frage Benutzer (außer wenn autoApprove)
+        const autoApprove = ConfigManager.get<boolean>('autoCommentAutoApprove', false);
+        
+        if (!autoApprove) {
+            const action = await vscode.window.showInformationMessage(
+                `🤖 ${limitedElements.length} neue Code-Elemente gefunden.\n\n` +
+                `Intelligente Kommentare generieren?`,
+                'Ja, alle',
+                'Einzeln durchgehen',
+                'Nein'
+            );
+
+            if (action === 'Einzeln durchgehen') {
+                await this.reviewElements(document, limitedElements);
+            } else if (action === 'Ja, alle') {
+                await this.commentAllElements(document, limitedElements);
+            }
+        } else {
+            await this.commentAllElements(document, limitedElements);
         }
+
+        // Update Hash nach erfolgreicher Verarbeitung
+        this.lastProcessedHash.set(uri, this.hashCode(document.getText()));
     }
 
     /**
-     * Einfache Code-Analyse
+     * Analysiert Code und findet Elemente
      */
-    private simpleCodeAnalysis(content: string, languageId: string): CodeElement[] {
+    private analyzeCode(content: string, languageId: string): CodeElement[] {
         const elements: CodeElement[] = [];
         const lines = content.split('\n');
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
-            // Funktionen
-            const funcMatch = line.match(/^\s*(export\s+)?(async\s+)?function\s+(\w+)/);
-            if (funcMatch) {
-                elements.push({
-                    type: 'function',
-                    name: funcMatch[3],
-                    startLine: i,
-                    endLine: i,
-                    complexity: 5
-                });
-            }
-
             // Klassen
             const classMatch = line.match(/^\s*(export\s+)?class\s+(\w+)/);
             if (classMatch) {
@@ -259,15 +215,37 @@ export class AutoCommentMonitor {
                 });
             }
 
-            // Methoden
-            const methodMatch = line.match(/^\s*(public|private|protected)?\s*(\w+)\s*\(/);
-            if (methodMatch && !funcMatch) {
+            // Funktionen
+            const funcMatch = line.match(/^\s*(export\s+)?(async\s+)?function\s+(\w+)/);
+            if (funcMatch) {
                 elements.push({
-                    type: 'method',
-                    name: methodMatch[2],
+                    type: 'function',
+                    name: funcMatch[3],
                     startLine: i,
                     endLine: i,
-                    complexity: 5
+                    complexity: 8
+                });
+            }
+
+            // Methoden (innerhalb Klassen)
+            const methodMatch = line.match(/^\s*(public|private|protected)?\s*(async\s+)?(\w+)\s*\(/);
+            if (methodMatch && !funcMatch && !classMatch) {
+                // Finde umgebende Klasse
+                let className = 'Unknown';
+                for (let j = i - 1; j >= 0; j--) {
+                    const classLine = lines[j].match(/class\s+(\w+)/);
+                    if (classLine) {
+                        className = classLine[1];
+                        break;
+                    }
+                }
+                
+                elements.push({
+                    type: 'method',
+                    name: `${className}.${methodMatch[3]}`,
+                    startLine: i,
+                    endLine: i,
+                    complexity: 7
                 });
             }
         }
@@ -276,186 +254,221 @@ export class AutoCommentMonitor {
     }
 
     /**
-     * Fragt Benutzer nach Aktion
+     * Filtert bereits dokumentierte Elemente
      */
-    private async askUserForAction(count: number): Promise<string> {
-        const autoApprove = ConfigManager.get<boolean>('autoCommentAutoApprove', false);
+    private filterUndocumented(
+        elements: CodeElement[],
+        document: vscode.TextDocument,
+        uri: string
+    ): CodeElement[] {
+        const documented = this.documentedElements.get(uri) || new Set();
         
-        if (autoApprove) {
-            return 'comment-all';
-        }
-
-        const action = await vscode.window.showInformationMessage(
-            `🤖 ${count} undokumentierte Code-Elemente gefunden`,
-            'Alle kommentieren',
-            'Einzeln durchgehen',
-            'Ignorieren'
-        );
-
-        if (action === 'Alle kommentieren') {
-            return 'comment-all';
-        } else if (action === 'Einzeln durchgehen') {
-            return 'review';
-        }
-
-        return 'ignore';
+        return elements.filter(el => {
+            // Bereits als dokumentiert markiert?
+            if (documented.has(el.name)) {
+                return false;
+            }
+            
+            // Prüfe ob Kommentar in den 5 Zeilen darüber
+            for (let i = Math.max(0, el.startLine - 5); i < el.startLine; i++) {
+                const line = document.lineAt(i).text;
+                if (line.includes('/**') || line.includes('//') || line.includes('/*')) {
+                    return false;
+                }
+            }
+            
+            return true;
+        });
     }
 
     /**
-     * Kommentiert alle Elemente automatisch
+     * Kommentiert alle Elemente mit intelligenten KI-Kommentaren
      */
-    private async commentAllElements(document: vscode.TextDocument, elements: CodeElement[]): Promise<void> {
+    private async commentAllElements(
+        document: vscode.TextDocument, 
+        elements: CodeElement[]
+    ): Promise<void> {
         const editor = await vscode.window.showTextDocument(document);
+        const uri = document.uri.toString();
+        let successCount = 0;
 
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: 'Generiere Kommentare...',
+            title: '🤖 Generiere intelligente Kommentare...',
             cancellable: false
         }, async (progress) => {
             for (let i = 0; i < elements.length; i++) {
                 const element = elements[i];
                 progress.report({
-                    message: `${i + 1}/${elements.length} - ${element.name}`,
+                    message: `${i + 1}/${elements.length}: ${element.name}`,
                     increment: (100 / elements.length)
                 });
 
-                await this.addCommentForElement(editor, element);
-                await new Promise(resolve => setTimeout(resolve, 100));
+                try {
+                    // Generiere INTELLIGENTEN Kommentar
+                    const comment = await this.generateIntelligentComment(element, document);
+                    const position = new vscode.Position(element.startLine, 0);
+                    await this.insertComment(editor, position, comment);
+                    
+                    // Markiere als dokumentiert
+                    const documented = this.documentedElements.get(uri) || new Set();
+                    documented.add(element.name);
+                    this.documentedElements.set(uri, documented);
+                    
+                    successCount++;
+                    await this.delay(300);
+                } catch (error) {
+                    ErrorHandler.handleError('AutoCommentMonitor.comment', error, false);
+                }
             }
         });
 
-        ErrorHandler.log('AutoCommentMonitor', `${elements.length} Kommentare hinzugefügt`, 'success');
+        if (successCount > 0) {
+            vscode.window.showInformationMessage(
+                `✅ ${successCount} intelligente Kommentare hinzugefügt!`
+            );
+        }
+
+        ErrorHandler.log('AutoCommentMonitor', `✅ ${successCount}/${elements.length} Kommentare`, 'success');
     }
 
     /**
-     * Lässt Benutzer Elemente einzeln durchgehen
+     * Generiert INTELLIGENTEN Kommentar mit KI
      */
-    private async reviewElements(document: vscode.TextDocument, elements: CodeElement[]): Promise<void> {
+    private async generateIntelligentComment(
+        element: CodeElement,
+        document: vscode.TextDocument
+    ): Promise<string> {
+        // Check ob OpenAI verfügbar
+        if (!this.generator.isOpenAIAvailable()) {
+            ErrorHandler.log('AutoCommentMonitor', '⚠️ OpenAI nicht verfügbar - nutze Basic-Kommentar');
+            return this.generateBasicComment(element);
+        }
+
+        try {
+            // Hole erweiterten Code-Kontext (15 Zeilen)
+            const startLine = Math.max(0, element.startLine - 5);
+            const endLine = Math.min(document.lineCount - 1, element.startLine + 20);
+            const codeContext = document.getText(
+                new vscode.Range(startLine, 0, endLine, 0)
+            );
+
+            // INTELLIGENTER Prompt
+            const prompt = this.buildSmartPrompt(element, codeContext);
+            
+            // KI-Anfrage (mit Timeout)
+            const aiComment = await Promise.race([
+                this.generator.enhanceWithOpenAI(prompt, null),
+                this.timeout(15000)
+            ]);
+            
+            // Formatiere als JSDoc
+            return this.generator.formatComment(aiComment.trim(), document.languageId);
+            
+        } catch (error) {
+            ErrorHandler.log('AutoCommentMonitor', `KI-Fehler für ${element.name}`);
+            return this.generateBasicComment(element);
+        }
+    }
+
+    /**
+     * Baut SMARTEN Prompt für bessere Kommentare
+     */
+    private buildSmartPrompt(element: CodeElement, codeContext: string): string {
+        const basePrompt = `Analysiere diesen Code und beschreibe präzise was er macht.
+
+Code:
+\`\`\`
+${codeContext}
+\`\`\`
+
+Erstelle einen präzisen, professionellen JSDoc-Kommentar auf Deutsch der:
+1. Die Hauptfunktion beschreibt (1-2 Sätze)
+2. Wichtige Parameter erklärt (falls vorhanden)
+3. Return-Wert erklärt (falls vorhanden)
+4. Besonderheiten erwähnt (async, error handling, etc.)
+
+Antworte NUR mit dem Kommentar-Text, OHNE Code, OHNE Markdown-Formatierung.`;
+
+        return basePrompt;
+    }
+
+    /**
+     * Fallback: Basic-Kommentar ohne KI
+     */
+    private generateBasicComment(element: CodeElement): string {
+        const descriptions: Record<string, string> = {
+            'class': `Klasse ${element.name.split('.').pop()}`,
+            'function': `Funktion ${element.name}`,
+            'method': `Methode ${element.name.split('.').pop()}`
+        };
+
+        return this.generator.formatComment(
+            descriptions[element.type] || element.name,
+            'typescript'
+        );
+    }
+
+    /**
+     * Einzeldurchgang mit Preview
+     */
+    private async reviewElements(
+        document: vscode.TextDocument,
+        elements: CodeElement[]
+    ): Promise<void> {
         const editor = await vscode.window.showTextDocument(document);
+        const uri = document.uri.toString();
 
         for (const element of elements) {
             const position = new vscode.Position(element.startLine, 0);
+            
+            // Springe zum Element
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(
                 new vscode.Range(position, position),
                 vscode.TextEditorRevealType.InCenter
             );
 
-            const comment = await this.generateCommentForElement(element);
-            
-            const action = await vscode.window.showInformationMessage(
-                `${element.type} "${element.name}":\n\n${comment}\n\nKommentar hinzufügen?`,
-                { modal: true },
-                'Ja',
-                'Bearbeiten',
-                'Überspringen',
-                'Abbrechen'
-            );
-
-            if (action === 'Ja') {
-                await this.insertComment(editor, position, comment);
-            } else if (action === 'Bearbeiten') {
-                const edited = await vscode.window.showInputBox({
-                    prompt: 'Kommentar bearbeiten',
-                    value: comment
-                });
-                if (edited) {
-                    await this.insertComment(editor, position, edited);
-                }
-            } else if (action === 'Abbrechen') {
-                break;
-            }
-        }
-    }
-
-    /**
-     * Fügt Kommentar für ein Element hinzu
-     */
-    private async addCommentForElement(editor: vscode.TextEditor, element: CodeElement): Promise<void> {
-        const comment = await this.generateCommentForElement(element);
-        const position = new vscode.Position(element.startLine, 0);
-        await this.insertComment(editor, position, comment);
-    }
-
-    /**
-     * Generiert Kommentar für ein Code-Element
-     */
-    private async generateCommentForElement(element: CodeElement): Promise<string> {
-        const codeDescription = this.generateCodeDescription(element);
-        
-        const useAI = ConfigManager.get<boolean>('autoCommentUseAI', true) && 
-                      this.generator.isOpenAIAvailable();
-
-        if (useAI) {
             try {
-                const prompt = this.buildAIPrompt(element, codeDescription);
-                const aiComment = await this.generator.enhanceWithOpenAI(prompt, codeDescription);
-                return this.generator.formatComment(aiComment, 'typescript');
+                const comment = await this.generateIntelligentComment(element, document);
+                
+                const action = await vscode.window.showInformationMessage(
+                    `📝 ${element.type}: "${element.name.split('.').pop()}"\n\n${comment}\n\nHinzufügen?`,
+                    { modal: true },
+                    'Ja',
+                    'Bearbeiten',
+                    'Überspringen',
+                    'Abbrechen'
+                );
+
+                if (action === 'Ja') {
+                    await this.insertComment(editor, position, comment);
+                    const documented = this.documentedElements.get(uri) || new Set();
+                    documented.add(element.name);
+                    this.documentedElements.set(uri, documented);
+                } else if (action === 'Bearbeiten') {
+                    const edited = await vscode.window.showInputBox({
+                        prompt: 'Kommentar bearbeiten',
+                        value: comment,
+                        ignoreFocusOut: true
+                    });
+                    if (edited) {
+                        await this.insertComment(editor, position, edited);
+                        const documented = this.documentedElements.get(uri) || new Set();
+                        documented.add(element.name);
+                        this.documentedElements.set(uri, documented);
+                    }
+                } else if (action === 'Überspringen') {
+                    const documented = this.documentedElements.get(uri) || new Set();
+                    documented.add(element.name);
+                    this.documentedElements.set(uri, documented);
+                } else {
+                    break;
+                }
             } catch (error) {
-                ErrorHandler.log('AutoCommentMonitor', 'KI-Generierung fehlgeschlagen, verwende Standard');
+                ErrorHandler.handleError('AutoCommentMonitor.review', error, false);
             }
         }
-
-        return this.generateStandardComment(element);
-    }
-
-    /**
-     * Generiert Code-Beschreibung für Element
-     */
-    private generateCodeDescription(element: CodeElement): string {
-        const parts: string[] = [`${element.type} ${element.name}`];
-        
-        if (element.parameters && element.parameters.length > 0) {
-            parts.push(`mit ${element.parameters.length} Parametern`);
-        }
-        
-        if (element.returnType) {
-            parts.push(`gibt ${element.returnType} zurück`);
-        }
-        
-        return parts.join(', ');
-    }
-
-    /**
-     * Erstellt KI-Prompt für Code-Element
-     */
-    private buildAIPrompt(element: CodeElement, description: string): string {
-        return `Erstelle einen professionellen JSDoc-Kommentar für dieses ${element.type}:\n\n${description}\n\nDer Kommentar soll beschreiben was der Code macht, nicht wie er es macht.`;
-    }
-
-    /**
-     * Generiert Standard-Kommentar ohne KI
-     */
-    private generateStandardComment(element: CodeElement): string {
-        const parts: string[] = [];
-
-        switch (element.type) {
-            case 'function':
-                parts.push(`Funktion ${element.name}`);
-                if (element.parameters && element.parameters.length > 0) {
-                    parts.push(`@param ${element.parameters.map(p => p.name).join(', ')}`);
-                }
-                if (element.returnType && element.returnType !== 'void') {
-                    parts.push(`@returns ${element.returnType}`);
-                }
-                break;
-
-            case 'class':
-                parts.push(`Klasse ${element.name}`);
-                if (element.methods && element.methods.length > 0) {
-                    parts.push(`Methoden: ${element.methods.slice(0, 3).map(m => m.name).join(', ')}`);
-                }
-                break;
-
-            case 'method':
-                parts.push(`Methode ${element.name}`);
-                if (element.parameters && element.parameters.length > 0) {
-                    parts.push(`@param ${element.parameters.map(p => p.name).join(', ')}`);
-                }
-                break;
-        }
-
-        return this.generator.formatComment(parts.join('\n'), 'typescript');
     }
 
     /**
@@ -468,26 +481,18 @@ export class AutoCommentMonitor {
     ): Promise<void> {
         const line = editor.document.lineAt(position.line);
         const indentation = line.firstNonWhitespaceCharacterIndex;
-        const indent = ' '.repeat(Math.max(0, indentation));
 
-        // 🔒 Validiere Position mit PositionValidator
         const mockPlacement = {
             comment: comment,
             targetLine: position.line,
             position: 'before' as const,
             indentation: indentation,
-            reasoning: 'Auto-Monitor Platzierung'
+            reasoning: 'Auto-Monitor'
         };
         
         const validated = PositionValidator.validateAndCorrect(
             editor.document,
             mockPlacement
-        );
-        
-        ErrorHandler.log(
-            'AutoCommentMonitor',
-            `Position validiert: Zeile ${validated.targetLine}, Einrückung ${validated.indentation}`,
-            'success'
         );
 
         await editor.edit(editBuilder => {
@@ -499,30 +504,51 @@ export class AutoCommentMonitor {
     }
 
     /**
-     * Gibt Statistiken zurück
+     * Hash-Funktion für Content
      */
+    private hashCode(str: string): string {
+        // Entferne Kommentare und Whitespace für Hash
+        const normalized = str
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/.*/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+            
+        let hash = 0;
+        for (let i = 0; i < normalized.length; i++) {
+            const char = normalized.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return hash.toString();
+    }
+
+    private timeout(ms: number): Promise<never> {
+        return new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), ms)
+        );
+    }
+
+    private delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     public getStatistics(): AutoCommentStatistics {
         return {
-            isActive: !!this.documentChangeListener,
-            monitoredDocuments: this.lastAnalyzedContent.size,
+            isActive: !!this.documentSaveListener,
+            monitoredDocuments: this.documentedElements.size,
             pendingAnalyses: this.pendingChanges.size
         };
     }
 
-    /**
-     * Cleanup
-     */
     public dispose(): void {
         this.stop();
-        this.lastAnalyzedContent.clear();
+        this.documentedElements.clear();
+        this.lastProcessedHash.clear();
         this.runningAnalyses.clear();
-        this.activeNotifications.clear();
     }
 }
 
-/**
- * Statistiken für Auto-Comment-Monitor
- */
 export interface AutoCommentStatistics {
     isActive: boolean;
     monitoredDocuments: number;

@@ -1,5 +1,4 @@
 /**
- * 🔒 Rate Limiter für API-Calls
  * Verhindert Kostenexplosion durch zu viele Requests
  */
 export class RateLimiter {
