@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import axios from 'axios';
 import { ASTCodeAnalyzer, CodeStructure } from './astAnalyzer';
 import { SmartCommentGenerator } from './smartCommentGenerator';
 import { ClaudeAnalyzer, CommentPlacement } from '../intelligent-placement/claudeAnalyzer';
@@ -140,7 +141,6 @@ export class HybridIntelligenceManager {
      */
     private static async checkInternetConnection(): Promise<boolean> {
         try {
-            const axios = require('axios');
             await axios.get('https://www.google.com', { timeout: 2000 });
             return true;
         } catch {

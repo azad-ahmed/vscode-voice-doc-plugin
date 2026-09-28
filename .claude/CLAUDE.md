@@ -2,12 +2,12 @@
 
 ## Prüfbefehle
 
-- `npm run compile` kompiliert die Extension mit `tsc` und ist derzeit der verlässliche Prüfbefehl.
-- `npm run lint` ist defekt: ESLint 9 erwartet eine `eslint.config.js`, im Repo liegt noch `.eslintrc.json`.
-- `npm run test:unit` ist defekt: `.mocharc.json` lädt `source-map-support/register`, das Paket ist nicht installiert.
+- `npm run compile` kompiliert die Extension mit `tsc`.
+- `npm run lint` prüft `src` mit ESLint 9 (`eslint.config.mjs`). Fehler lassen den Befehl scheitern, Warnungen nicht. Rund 470 Warnungen stammen aus dem bestehenden Code; neue Änderungen sollen keine weiteren hinzufügen.
+- `npm run test:unit` kompiliert die Tests und startet die Mocha-Unit-Tests in `test/unit` ohne VS Code. `test/unit/vscodeStub.ts` ersetzt dabei das Modul `vscode`.
 - `npm test` startet die VS-Code-Integrationstests über `@vscode/test-electron` und lädt dafür VS Code herunter.
 
-Verwende `lint` und `test:unit` erst als Nachweis, wenn sie repariert sind.
+Als Nachweis für Änderungen dienen `compile`, `lint` und `test:unit`.
 
 ## Claudex Loop
 

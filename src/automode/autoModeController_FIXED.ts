@@ -282,7 +282,7 @@ h3 { margin-top: 20px; }
         const text = document.getText();
         const offset = document.offsetAt(position);
         
-        const functionRegex = /(?:function|const|let|var|async|def)\s+(\w+)\s*[=\(]/g;
+        const functionRegex = /(?:function|const|let|var|async|def)\s+(\w+)\s*[=(]/g;
         const classRegex = /class\s+(\w+)/g;
         const methodRegex = /(\w+)\s*\([^)]*\)\s*[:{]/g;
         

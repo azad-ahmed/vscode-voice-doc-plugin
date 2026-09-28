@@ -344,8 +344,8 @@ export class OfflineCodeAnalyzer {
         endLine: number
     ): BlockStructure {
         const blocks: CodeBlock[] = [];
-        let currentIndent = 0;
-        let blockStack: CodeBlock[] = [];
+        const currentIndent = 0;
+        const blockStack: CodeBlock[] = [];
 
         for (let i = startLine; i <= Math.min(endLine, document.lineCount - 1); i++) {
             const line = document.lineAt(i);

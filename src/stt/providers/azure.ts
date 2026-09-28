@@ -1,4 +1,5 @@
 import { STTProvider } from '../types';
+import * as fs from 'fs';
 import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
 import { FileSystemHelper } from '../../utils/fileSystemHelper';
 
@@ -42,8 +43,6 @@ export class AzureSTTProvider implements STTProvider {
     }
 
     private async recognizeFromFile(audioPath: string, language?: string): Promise<string> {
-        const fs = require('fs');
-        
         const speechConfig = sdk.SpeechConfig.fromSubscription(
             this.apiKey!,
             this.region!
@@ -71,10 +70,11 @@ export class AzureSTTProvider implements STTProvider {
                             reject(new Error('Keine Sprache erkannt'));
                             break;
 
-                        case sdk.ResultReason.Canceled:
+                        case sdk.ResultReason.Canceled: {
                             const cancellation = sdk.CancellationDetails.fromResult(result);
                             reject(new Error(`Abgebrochen: ${cancellation.errorDetails}`));
                             break;
+                        }
 
                         default:
                             reject(new Error(`Unbekannter Fehler: ${result.reason}`));

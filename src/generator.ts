@@ -138,7 +138,6 @@ export class CommentGenerator {
                 timeout: this.requestTimeout
             };
 
-            let timeoutHandle: NodeJS.Timeout;
             let hasTimedOut = false;
             let isResolved = false;
 
@@ -212,7 +211,7 @@ export class CommentGenerator {
                 }
             });
 
-            timeoutHandle = setTimeout(() => {
+            const timeoutHandle = setTimeout(() => {
                 hasTimedOut = true;
                 req.destroy();
                 ErrorHandler.handleWarning(

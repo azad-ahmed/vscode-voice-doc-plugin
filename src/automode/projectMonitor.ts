@@ -661,14 +661,15 @@ export class ProjectMonitor {
             case 'javascript':
             case 'typescript':
             case 'java':
-            case 'csharp':
+            case 'csharp': {
                 const lines = text.split('\n');
                 if (lines.length === 1) {
                     return `${indent}/** ${text} */`;
                 } else {
                     return `${indent}/**\n${lines.map(l => `${indent} * ${l}`).join('\n')}\n${indent} */`;
                 }
-            
+            }
+
             case 'go':
             case 'rust':
                 return `${indent}// ${text.replace(/\n/g, '\n' + indent + '// ')}`;
