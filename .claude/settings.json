@@ -2,14 +2,14 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "language": "german",
   "extraKnownMarketplaces": {
-    "openai-codex": {
+    "claudex-loop": {
       "source": {
         "source": "github",
-        "repo": "openai/codex-plugin-cc"
+        "repo": "chaseai-yt/claudex-loop"
       }
     }
   },
   "enabledPlugins": {
-    "codex@openai-codex": true
+    "claudex-loop@claudex-loop": true
   }
 }

@@ -48,6 +48,11 @@ coverage/
 # Playwright MCP (Snapshots, Screenshots, Logs)
 .playwright-mcp/
 
+# Claudex Loop (Plan und Review-Log; ignoriert, damit Builds mit
+# builder=codex eine saubere Arbeitskopie vorfinden)
+/PLAN.md
+/PLAN-REVIEW-LOG.md
+
 # API Keys (wichtig!)
 .api-keys
 secrets/
