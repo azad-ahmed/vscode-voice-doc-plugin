@@ -1,6 +1,7 @@
 {
-  "require": ["source-map-support/register"],
+  "require": ["source-map-support/register", "./out/test/unit/vscodeStub.js"],
   "spec": "out/test/unit/**/*.test.js",
+  "ui": "tdd",
   "timeout": 5000,
   "color": true,
   "reporter": "spec"

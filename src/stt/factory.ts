@@ -106,14 +106,16 @@ export class STTFactory {
     private static async createProviderByName(name: string): Promise<STTProvider> {
         switch (name.toLowerCase()) {
             case 'openai':
-            case 'whisper':
+            case 'whisper': {
                 const openaiKey = await ConfigManager.getSecret('openAIApiKey');
                 return new OpenAIWhisperProvider(openaiKey);
+            }
 
-            case 'azure':
+            case 'azure': {
                 const azureKey = await ConfigManager.getSecret('azureApiKey');
                 const azureRegion = ConfigManager.get<string>('azureRegion');
                 return new AzureSTTProvider(azureKey, azureRegion);
+            }
 
             default:
                 throw new Error(`Unbekannter Provider: ${name}`);

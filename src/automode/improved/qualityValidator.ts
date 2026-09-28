@@ -288,12 +288,13 @@ export class CommentQualityValidator {
                     improved = improved.replace(/\s+/g, ' ');
                     break;
                     
-                case 'missing-punctuation':
+                case 'missing-punctuation': {
                     const cleaned = this.cleanComment(improved);
                     if (!/[.!?]$/.test(cleaned)) {
                         improved = improved.trim() + '.';
                     }
                     break;
+                }
             }
         }
         

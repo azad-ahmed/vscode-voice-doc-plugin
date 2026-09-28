@@ -1,8 +1,9 @@
 import { STTProvider } from '../types';
+import * as fs from 'fs';
 import * as https from 'https';
 import { FileSystemHelper } from '../../utils/fileSystemHelper';
 import { ErrorHandler } from '../../utils/errorHandler';
-import FormData = require('form-data');
+import FormData from 'form-data';
 
 /**
  * OpenAI Whisper API Provider für Speech-to-Text
@@ -42,8 +43,7 @@ export class OpenAIWhisperProvider implements STTProvider {
     }
 
     private async callWhisperAPI(audioPath: string, language?: string): Promise<string> {
-        return new Promise(async (resolve, reject) => {
-            const fs = require('fs');
+        return new Promise((resolve, reject) => {
             const form = new FormData();
             form.append('file', fs.createReadStream(audioPath));
             form.append('model', 'whisper-1');
