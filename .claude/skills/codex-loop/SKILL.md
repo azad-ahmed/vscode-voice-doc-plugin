@@ -1,8 +1,8 @@
 ---
 name: codex-loop
 description: Plan mit Codex in mehreren Review-Runden härten, umsetzen und das Ergebnis von Codex gegenprüfen lassen. Ersatz für den Claudex Loop auf Basis des offiziellen Codex-Plugins (openai/codex-plugin-cc).
+when_to_use: Starte den Loop selbst bei größeren oder riskanten Umsetzungen, bei denen ein falscher Plan teuer wäre, etwa neue Features über mehrere Dateien, größere Refactorings oder Änderungen an gespeicherten Daten, Nebenläufigkeit, Sicherheit, Konfigurationsformaten oder öffentlichen Schnittstellen. Außerdem, wenn der Nutzer Codex prüfen lassen will oder „claudex“ oder „codex-loop“ sagt. Nicht für kleine Fixes, Einzeiler, reine Doku- oder Textänderungen, Fragen und Erklärungen, und nicht, wenn der Subagent codex:codex-rescue fehlt, etwa in Cloud-Sessions.
 argument-hint: "<Auftrag> [modus=voll|review] [runden=5] [plan=PLAN.md] [log=PLAN-REVIEW-LOG.md] [pruefen=an|aus]"
-disable-model-invocation: true
 allowed-tools: Bash(git status *) Bash(git diff *) Bash(git rev-parse *) Bash(git hash-object *)
 ---
 
@@ -13,6 +13,8 @@ Grundsatz: Wer baut, bewertet seine Arbeit nicht selbst. Du (Claude) klärst die
 Argumente: $ARGUMENTS
 
 Lies Optionen im Format `schlüssel=wert` aus den Argumenten, der Rest ist der Auftrag. Nenne vor dem Start Modus, Plan- und Log-Datei und das Rundenlimit.
+
+Hast du den Loop selbst gestartet, ist der Auftrag die aktuelle Aufgabe aus dem Gespräch. Sag dem Nutzer in einem Satz, dass du den Loop startest und warum. Gebaut wird nur, wenn der Nutzer eine Umsetzung verlangt hat, sonst nimmst du `modus=review`.
 
 | Option | Standard | Bedeutung |
 |---|---|---|
@@ -107,7 +109,7 @@ Du bist ein unabhängiger, kritischer Reviewer. Claude hat `<plan>` umgesetzt, A
 
 Häng die Antwort unter „Gegenprüfung <n>: Codex“ ans Log an. Bei REVISE behebst du die übernommenen high- und medium-Findings, führst die Prüfbefehle erneut aus und lässt mit `--wait --fresh` neu prüfen. Nenne Codex dabei die behobenen Findings. Höchstens 2 Nachbesserungsrunden, was danach offen ist, meldest du dem Nutzer.
 
-Mit `/codex-loop` hat der Nutzer ausdrücklich beauftragt, Findings einzuarbeiten: im Plan (Phase 2) und im Code, soweit der Plan sie abdeckt (Phase 4). Die allgemeine Regel des Plugins, nach einem Review erst nachzufragen, gilt hier deshalb nicht. Änderungen über den Plan hinaus brauchen weiterhin die Zustimmung des Nutzers.
+Der Nutzer hat diesen Loop eingerichtet, damit Findings eingearbeitet werden: im Plan (Phase 2) und im Code, soweit der Plan sie abdeckt (Phase 4). Die allgemeine Regel des Plugins, nach einem Review erst nachzufragen, gilt hier deshalb nicht. Änderungen über den Plan hinaus brauchen weiterhin die Zustimmung des Nutzers.
 
 ## Abschluss
 
