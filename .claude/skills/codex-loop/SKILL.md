@@ -12,9 +12,9 @@ Grundsatz: Wer baut, bewertet seine Arbeit nicht selbst. Du (Claude) klärst die
 
 Argumente: $ARGUMENTS
 
-Lies Optionen im Format `schlüssel=wert` aus den Argumenten, der Rest ist der Auftrag. Nenne vor dem Start Modus, Plan- und Log-Datei und das Rundenlimit.
+Lies Optionen im Format `schlüssel=wert` aus den Argumenten, der Rest ist der Auftrag. Hast du den Loop selbst gestartet, ist der Auftrag die aktuelle Aufgabe aus dem Gespräch. Gebaut wird dann nur, wenn der Nutzer eine Umsetzung verlangt hat, sonst nimmst du `modus=review`.
 
-Hast du den Loop selbst gestartet, ist der Auftrag die aktuelle Aufgabe aus dem Gespräch. Sag dem Nutzer in einem Satz, dass du den Loop startest und warum. Gebaut wird nur, wenn der Nutzer eine Umsetzung verlangt hat, sonst nimmst du `modus=review`.
+**Deine erste Ausgabe, noch vor dem ersten Tool-Aufruf:** ein Satz an den Nutzer mit Modus, Plan- und Log-Datei und Rundenlimit. Hast du den Loop selbst gestartet, nennst du auch den Grund, denn jeder Durchlauf verbraucht Codex-Kontingent.
 
 | Option | Standard | Bedeutung |
 |---|---|---|
