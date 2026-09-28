@@ -1,7 +1,7 @@
 ---
 name: codex-loop
-description: Plan mit Codex in mehreren Review-Runden härten, umsetzen und das Ergebnis von Codex gegenprüfen lassen. Ersatz für den Claudex Loop auf Basis des offiziellen Codex-Plugins (openai/codex-plugin-cc).
-when_to_use: Starte den Loop selbst bei größeren oder riskanten Umsetzungen, bei denen ein falscher Plan teuer wäre, etwa neue Features über mehrere Dateien, größere Refactorings oder Änderungen an gespeicherten Daten, Nebenläufigkeit, Sicherheit, Konfigurationsformaten oder öffentlichen Schnittstellen. Außerdem, wenn der Nutzer Codex prüfen lassen will oder „claudex“ oder „codex-loop“ sagt. Nicht für kleine Fixes, Einzeiler, reine Doku- oder Textänderungen, Fragen und Erklärungen, und nicht, wenn der Subagent codex:codex-rescue fehlt, etwa in Cloud-Sessions.
+description: Pflicht-Ablauf für größere oder riskante Umsetzungen in diesem Repo, bevor Code geschrieben wird. Claude plant, Codex prüft den Plan in Review-Runden, Claude baut, Codex prüft den Code gegen. Ersatz für den Claudex Loop auf Basis des offiziellen Codex-Plugins (openai/codex-plugin-cc).
+when_to_use: Starte diesen Skill selbst, bevor du die erste Datei änderst, wenn eine Umsetzung mehrere Dateien betrifft oder gespeicherte Daten, Nebenläufigkeit, Fehlerbehandlung, Sicherheit, Konfigurationsformate oder öffentliche Schnittstellen berührt. Außerdem, wenn der Nutzer Codex prüfen lassen will oder „claudex“ oder „codex-loop“ sagt. Nicht für kleine Fixes, Einzeiler, reine Doku- oder Textänderungen, Fragen und Erklärungen, und nicht, wenn der Subagent codex:codex-rescue fehlt, etwa in Cloud-Sessions.
 argument-hint: "<Auftrag> [modus=voll|review] [runden=5] [plan=PLAN.md] [log=PLAN-REVIEW-LOG.md] [pruefen=an|aus]"
 allowed-tools: Bash(git status *) Bash(git diff *) Bash(git rev-parse *) Bash(git hash-object *)
 ---
